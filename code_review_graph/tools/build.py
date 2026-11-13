@@ -284,6 +284,7 @@ def _run_postprocess(
         and changed_files is not None
         and build_result.get("files_updated") == 0
         and not build_result.get("stale_files_removed")
+        and not build_result.get("django_enrichment")
         # A C# rebind with no source change still owes the flows a rebuild.
         and store.get_metadata("csharp_flows_dirty") != "1"
     )
@@ -392,6 +393,9 @@ def _run_postprocess(
     use_incremental = (
         not full_rebuild
         and not build_result.get("identity_rebuild")
+        # Django enrichment resolves against the entire project, including
+        # callers outside the files re-parsed by this update.
+        and not build_result.get("django_enrichment")
         and (
             bool(changed_files)
             or bool(entry_point_qns)
@@ -642,8 +646,13 @@ def build_or_update_graph(
                     "postprocess_level": postprocess,
                 }
             failed = [str(item.get("file", "?")) for item in result["errors"]]
-            if result["files_updated"] == 0 and not failed and not (
-                postprocess == "full" and store.get_metadata("csharp_flows_dirty") == "1"
+            if (
+                result["files_updated"] == 0
+                and not failed
+                and not result.get("django_enrichment")
+                and not (
+                    postprocess == "full" and store.get_metadata("csharp_flows_dirty") == "1"
+                )
             ):
                 summary = (
                     "No changes detected. Graph is up to date."

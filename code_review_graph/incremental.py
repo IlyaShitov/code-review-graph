@@ -36,6 +36,7 @@ from .constants import (
     read_only_requested,
 )
 from .csharp_resolver import restore_csharp_references
+from .django_enricher.enrich import enrich_django
 from .errors import ChangeDiscoveryError, GraphRootMismatchError, GraphStoreError
 from .graph import GraphStore
 from .locking import WriteLock, write_lock_path
@@ -3123,6 +3124,7 @@ def full_build(
     jedi_stats = _run_jedi_enrichment(store, repo_root, enrich=enrich)
     _relink_stored_edges(store, repo_root, followed_dirs)
     _refresh_target_resolution(store)
+    django_stats = enrich_django(store, repo_root)
     store.set_metadata(_DEPENDENTS_PENDING_KEY, "[]")
     # Storing is over: every file that could be parsed has its rows. Recorded
     # before the anchor and before post-processing, so a process killed from
@@ -3149,6 +3151,7 @@ def full_build(
         "hcl_resolution": hcl_stats,
         "scoped_resolution": scoped_stats,
         "jedi_enrichment": jedi_stats,
+        "django_enrichment": django_stats,
     }
 
 
@@ -3354,6 +3357,7 @@ def incremental_update(
             "communities_were_affected": False,
             "errors": [],
             "freshness_advanced": False,
+            "django_enrichment": enrich_django(store, repo_root),
         }
 
     # Find dependent files (files that import from changed files)
@@ -3655,6 +3659,7 @@ def incremental_update(
         _relink_stored_edges(store, repo_root, followed_dirs)
     if has_graph_changes or scoped_changed:
         _refresh_target_resolution(store)
+    django_stats = enrich_django(store, repo_root)
 
     # Freshness follows what was stored. A file that failed to parse is
     # reported in ``errors`` and keeps its previous rows; it must not stop the
@@ -3702,6 +3707,7 @@ def incremental_update(
         "hcl_resolution": hcl_stats,
         "scoped_resolution": scoped_stats,
         "jedi_enrichment": jedi_stats,
+        "django_enrichment": django_stats,
         **({"identity_rebuild": True} if csharp_upgrade else {}),
     }
 

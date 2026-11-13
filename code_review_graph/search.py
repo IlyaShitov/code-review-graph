@@ -534,7 +534,7 @@ def rrf_merge(*result_lists: list[tuple[int, float]], k: int = 60) -> list[tuple
 
 
 _EXPLICIT_PHRASE_RE = re.compile(r'"([^"]*)"')
-_HAS_ALNUM_RE = re.compile(r"[0-9A-Za-z]")
+_HAS_ALNUM_RE = re.compile(r"[^\W_]")
 # A prefix term is only useful once it carries some signal. "a*" matches
 # nearly every document in the index, so short tokens stay exact.
 _MIN_PREFIX_ALNUM = 3
@@ -992,6 +992,51 @@ def _fts_search_past_json(
     return sorted(results + others, key=lambda row: row[1], reverse=True)
 
 
+def _exact_label_ids(
+    conn: sqlite3.Connection, query: str, kind: str | None, limit: int,
+) -> list[int]:
+    """Find complete Django model labels before the ranked candidate cutoff."""
+    if kind not in (None, "Class"):
+        return []
+    label = query.strip()
+    phrase = _EXPLICIT_PHRASE_RE.fullmatch(label)
+    if phrase:
+        label = phrase.group(1)
+    elif '"' in label:
+        # A phrase plus other terms is not a request for just that label.
+        return []
+    label = " ".join(label.split())
+    if not _HAS_ALNUM_RE.search(label):
+        return []
+    folded_label = label.casefold()
+
+    keys = ("Meta.verbose_name", "Meta.verbose_name_plural")
+    expression = "docstring : (" + " OR ".join(
+        _quote_term(f"{key} {label}") for key in keys
+    ) + ")"
+    try:
+        rows = conn.execute(
+            "SELECT nodes.id, nodes.docstring FROM nodes_fts "
+            "JOIN nodes ON nodes.id = nodes_fts.rowid "
+            "WHERE nodes_fts MATCH ? AND nodes.kind = 'Class' "
+            "ORDER BY nodes.qualified_name",
+            (expression,),
+        )
+        matches = []
+        for node_id, docstring in rows:
+            for line in (docstring or "").splitlines():
+                key, _, value = line.partition(":")
+                if key in keys and " ".join(value.split()).casefold() == folded_label:
+                    matches.append(node_id)
+                    break
+            if len(matches) >= limit:
+                break
+        return matches
+    except sqlite3.OperationalError:
+        # Older or missing FTS indexes still use the ordinary search fallback.
+        return []
+
+
 def hybrid_search(
     store: GraphStore,
     query: str,
@@ -1055,6 +1100,8 @@ def hybrid_search(
         params.append(limit)
         exact_ids = [row[0] for row in conn.execute(sql, params)]
 
+    exact_label_ids = _exact_label_ids(conn, query, kind, limit)
+
     # ------ Phase 1: Gather ranked lists ------
     fts_results: list[tuple[int, float]] = []
     emb_results: list[tuple[int, float]] = []
@@ -1093,7 +1140,7 @@ def hybrid_search(
     else:
         # Fallback: keyword LIKE matching
         keyword_results = _keyword_search(conn, query, limit=fetch_limit, kind=kind)
-        if not keyword_results and not exact_ids:
+        if not keyword_results and not exact_ids and not exact_label_ids:
             if _out_mode is not None:
                 _out_mode.append("none")
             return []
@@ -1102,7 +1149,9 @@ def hybrid_search(
         merged = keyword_results
 
     candidate_scores = dict(merged)
-    for node_id, score in rrf_merge([(node_id, 1.0) for node_id in exact_ids]):
+    for node_id, score in rrf_merge([
+        (node_id, 1.0) for node_id in dict.fromkeys([*exact_ids, *exact_label_ids])
+    ]):
         candidate_scores.setdefault(node_id, score)
     merged = list(candidate_scores.items())
 
@@ -1189,7 +1238,9 @@ def hybrid_search(
 
         boosted.append((node_id, score * boost))
 
-    boosted.sort(key=lambda x: (x[0] in exact_ids, x[1]), reverse=True)
+    boosted.sort(
+        key=lambda x: (x[0] in exact_ids, x[0] in exact_label_ids, x[1]), reverse=True,
+    )
 
     # Build results from the already-fetched rows
     results: list[dict[str, Any]] = []

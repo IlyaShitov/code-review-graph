@@ -261,6 +261,76 @@ def _names(results: list[dict]) -> list[str]:
     return [r["name"] for r in results]
 
 
+@pytest.fixture
+def django_label_store(store):
+    labels = [
+        ("TripPlan", "Class", "Details " * 200 + "\nMeta.verbose_name: План рейса\n"
+         "Meta.verbose_name_plural: Планы рейсов"),
+        ("Organization", "Class", "name: Сокращённое наименование\n"
+         "organization_type: Тип организации\nMeta.verbose_name: Организация"),
+        ("OrganizationQuerySet", "Class", "An organization collection."),
+        ("CAN_PLAN", "Constant", "verbose_name: Может планировать транспорт"),
+        ("City", "Class", "城市交通"),
+        ("Street", "Class", "Details " * 200 + "\nMeta.verbose_name: Straße"),
+    ]
+    labels.extend(
+        (f"TripPlanFilter{i}", "Class", "trip_plan: План рейса\nstreet: Straße")
+        for i in range(30)
+    )
+    for name, kind, docstring in labels:
+        store.upsert_node(NodeInfo(
+            kind=kind, name=name, file_path=f"models/{name}.py",
+            line_start=1, line_end=10, language="python", extra={"docstring": docstring},
+        ), file_hash="labels")
+        # The Django enricher writes complete, line-separated labels directly.
+        store._conn.execute("UPDATE nodes SET docstring = ? WHERE name = ?", (docstring, name))
+    store.commit()
+    rebuild_fts_index(store)
+    return store
+
+
+class TestUnicodeLabels:
+    @pytest.mark.parametrize("query, expected", [
+        ("Может планировать транспорт", "CAN_PLAN"),
+        ('"Может планировать транспорт"', "CAN_PLAN"),
+        ('"Сокращённое наименование"', "Organization"),
+        ("城市交通", "City"),
+    ])
+    def test_unicode_labels_are_searchable(self, django_label_store, query, expected):
+        mode = []
+        results = hybrid_search(django_label_store, query, limit=1, _out_mode=mode)
+        assert _names(results) == [expected]
+        assert mode == ["fts"]
+
+    @pytest.mark.parametrize("query", [
+        "План рейса", '"План рейса"', "план РЕЙСА", "Планы рейсов",
+    ])
+    def test_exact_model_label_survives_candidate_limit(self, django_label_store, query):
+        assert _names(hybrid_search(django_label_store, query, limit=1)) == ["TripPlan"]
+
+    def test_exact_label_respects_kind_filter(self, django_label_store):
+        assert hybrid_search(django_label_store, '"План рейса"', kind="Function") == []
+
+    def test_exact_label_preserves_fts_token_spelling(self, django_label_store):
+        assert _names(hybrid_search(django_label_store, "Straße", limit=1)) == ["Street"]
+
+    def test_mixed_query_does_not_ignore_extra_terms(self, django_label_store):
+        assert hybrid_search(django_label_store, 'missing_symbol "План рейса"') == []
+
+    def test_mixed_query_keeps_the_russian_constraint(self, django_label_store):
+        assert _names(hybrid_search(
+            django_label_store, 'Organization "Тип организации"', limit=20,
+        )) == ["Organization"]
+
+    def test_yo_and_e_remain_distinct(self, django_label_store):
+        assert hybrid_search(django_label_store, '"Сокращенное наименование"') == []
+
+    def test_exact_identifier_keeps_priority(self, django_label_store):
+        assert _names(hybrid_search(django_label_store, "OrganizationQuerySet", limit=1)) == [
+            "OrganizationQuerySet"
+        ]
+
+
 class TestSearchBehaviour:
     def test_multi_word_prose_query_finds_separated_words(self, store):
         """No node holds "password hashing" adjacently; search must still hit."""
