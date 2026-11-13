@@ -414,6 +414,8 @@ async def _raw(session: Any, name: str, args: dict[str, Any] | None = None) -> A
 
 async def _call(session: Any, name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
     """Call a tool and decode the JSON object it returned."""
+    if name in {"query_graph_tool", "semantic_search_nodes_tool"}:
+        args = {"output_format": "json", **(args or {})}
     result = await _raw(session, name, args)
     body = _text(result)
     assert not wire(result, "isError"), f"{name}{args or {}} failed: {body[:600]}"

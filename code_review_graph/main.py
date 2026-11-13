@@ -17,7 +17,7 @@ import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 import anyio.to_thread
 from fastmcp import FastMCP
@@ -26,6 +26,7 @@ from fastmcp.prompts import Message
 
 from . import __version__
 from . import incremental as _incremental
+from .compact import format_compact
 from .constants import MAX_IMPACT_NODES, env_int
 
 # The graph store and incremental module load with the server anyway (the
@@ -572,7 +573,7 @@ async def get_impact_radius_tool(
     )
 
 
-@mcp.tool(annotations={"readOnlyHint": True})
+@mcp.tool(annotations={"readOnlyHint": True}, output_schema=None)
 async def query_graph_tool(
     pattern: str,
     target: str,
@@ -581,7 +582,8 @@ async def query_graph_tool(
     max_results: int = 100,
     resolution: str = "all",
     to: Optional[str] = None,
-) -> dict:
+    output_format: Literal["compact", "json"] = "compact",
+) -> str | dict:
     """Run a predefined graph query to explore code relationships.
 
     Available patterns:
@@ -627,9 +629,11 @@ async def query_graph_tool(
         resolution: "all" (default), "direct" for only calls bound to an indexed
             node, or "unresolved" for only the bare-name matches.
         to: For path_to, the node name, qualified name, or file path to reach.
+        output_format: "compact" (default) for readable text, "json" for the
+            original structured response. Errors remain JSON in either mode.
     """
     root = _resolve_repo_root(repo_root)
-    return await _offload(
+    result = await _offload(
         "query_graph_tool",
         lambda: query_graph(
             pattern=pattern, target=target, repo_root=root,
@@ -638,6 +642,7 @@ async def query_graph_tool(
         ),
         root,
     )
+    return format_compact(result, root) if output_format == "compact" else result
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -684,7 +689,7 @@ async def get_review_context_tool(
     )
 
 
-@mcp.tool(annotations={"readOnlyHint": True})
+@mcp.tool(annotations={"readOnlyHint": True}, output_schema=None)
 async def semantic_search_nodes_tool(
     query: str,
     kind: Optional[str] = None,
@@ -696,7 +701,8 @@ async def semantic_search_nodes_tool(
     include_source: bool = False,
     expand_neighbors: bool = False,
     max_source_lines: int = 60,
-) -> dict:
+    output_format: Literal["compact", "json"] = "compact",
+) -> str | dict:
     """Search for code entities by name, keyword, or semantic similarity.
 
     Uses vector embeddings for semantic search when available (run embed_graph_tool
@@ -729,9 +735,11 @@ async def semantic_search_nodes_tool(
                           answers "how does X work". Default: False.
         max_source_lines: With include_source, the most lines per snippet
                           (1-60). Default: 60.
+        output_format: "compact" (default) for readable text, "json" for the
+            original structured response. Requested source is kept in both.
     """
     root = _resolve_repo_root(repo_root)
-    return await _offload(
+    result = await _offload(
         "semantic_search_nodes_tool",
         lambda: semantic_search_nodes(
             query=query, kind=kind, limit=limit, repo_root=root,
@@ -741,6 +749,7 @@ async def semantic_search_nodes_tool(
         ),
         root,
     )
+    return format_compact(result, root) if output_format == "compact" else result
 
 
 @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True})

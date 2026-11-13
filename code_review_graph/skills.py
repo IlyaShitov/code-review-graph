@@ -1548,9 +1548,10 @@ _SKILLS: dict[str, dict[str, str]] = {
             "6. Call `list_graph_stats_tool` only when you need node, edge and language counts.\n\n"
             "## Token Efficiency Rules\n"
             '- Call `get_minimal_context_tool(task="<your task>")` before any other graph tool.\n'
-            '- Pass `detail_level="minimal"` unless it is not enough. Minimal drops source, so '
-            "leave `semantic_search_nodes_tool(include_source=True)` and "
-            "`get_review_context_tool` at standard.\n"
+            "- For `query_graph_tool` and `semantic_search_nodes_tool`, use "
+            '`detail_level="standard"` with `output_format="compact"` by default; '
+            "reserve `minimal` for brief overviews. For other tools, use `minimal` "
+            "when sufficient; keep `get_review_context_tool` at standard when source is needed.\n"
             "- Prefer a targeted `query_graph_tool` call over a broad listing call.\n"
             "- Budget: about five tool calls per task. Source snippets stand in for file reads.\n"
             "- Read the implementation and its tests before changing code. The graph narrows "
@@ -1578,9 +1579,10 @@ _SKILLS: dict[str, dict[str, str]] = {
             "recommendation.\n\n"
             "## Token Efficiency Rules\n"
             '- Call `get_minimal_context_tool(task="<your task>")` before any other graph tool.\n'
-            '- Pass `detail_level="minimal"` unless it is not enough. Minimal drops source, so '
-            "leave `semantic_search_nodes_tool(include_source=True)` and "
-            "`get_review_context_tool` at standard.\n"
+            "- For `query_graph_tool` and `semantic_search_nodes_tool`, use "
+            '`detail_level="standard"` with `output_format="compact"` by default; '
+            "reserve `minimal` for brief overviews. For other tools, use `minimal` "
+            "when sufficient; keep `get_review_context_tool` at standard when source is needed.\n"
             "- Prefer a targeted `query_graph_tool` call over a broad listing call.\n"
             "- Budget: about five tool calls per task. Source snippets stand in for file reads.\n"
             "- Read the implementation and its tests before changing code. The graph narrows "
@@ -1604,9 +1606,10 @@ _SKILLS: dict[str, dict[str, str]] = {
             "affect.\n\n"
             "## Token Efficiency Rules\n"
             '- Call `get_minimal_context_tool(task="<your task>")` before any other graph tool.\n'
-            '- Pass `detail_level="minimal"` unless it is not enough. Minimal drops source, so '
-            "leave `semantic_search_nodes_tool(include_source=True)` and "
-            "`get_review_context_tool` at standard.\n"
+            "- For `query_graph_tool` and `semantic_search_nodes_tool`, use "
+            '`detail_level="standard"` with `output_format="compact"` by default; '
+            "reserve `minimal` for brief overviews. For other tools, use `minimal` "
+            "when sufficient; keep `get_review_context_tool` at standard when source is needed.\n"
             "- Prefer a targeted `query_graph_tool` call over a broad listing call.\n"
             "- Budget: about five tool calls per task. Source snippets stand in for file reads.\n"
             "- Read the implementation and its tests before changing code. The graph narrows "
@@ -1632,9 +1635,10 @@ _SKILLS: dict[str, dict[str, str]] = {
             "plan.\n\n"
             "## Token Efficiency Rules\n"
             '- Call `get_minimal_context_tool(task="<your task>")` before any other graph tool.\n'
-            '- Pass `detail_level="minimal"` unless it is not enough. Minimal drops source, so '
-            "leave `semantic_search_nodes_tool(include_source=True)` and "
-            "`get_review_context_tool` at standard.\n"
+            "- For `query_graph_tool` and `semantic_search_nodes_tool`, use "
+            '`detail_level="standard"` with `output_format="compact"` by default; '
+            "reserve `minimal` for brief overviews. For other tools, use `minimal` "
+            "when sufficient; keep `get_review_context_tool` at standard when source is needed.\n"
             "- Prefer a targeted `query_graph_tool` call over a broad listing call.\n"
             "- Budget: about five tool calls per task. Source snippets stand in for file reads.\n"
             "- Read the implementation and its tests before changing code. The graph narrows "
@@ -1731,8 +1735,10 @@ DOCUMENTARY_SKILLS: dict[str, dict[str, str]] = {
             "`review_guidance` (untested functions, wide blast radius, inheritance changes).\n"
             "4. For each untested high-risk function, confirm with "
             "`query_graph_tool(pattern=\"tests_for\", target=\"<function>\")`.\n"
-            "5. Use `detail_level=\"standard\"` only for a high-risk item the minimal output "
-            "leaves unclear. Do not load whole files unless a snippet is not enough.\n\n"
+            '5. Use `detail_level="standard"` with `output_format="compact"` by default for '
+            "`query_graph_tool` and `semantic_search_nodes_tool`. For `detect_changes_tool`, "
+            "request standard only when minimal leaves a high-risk item unclear. "
+            "Do not load whole files unless a snippet is not enough.\n\n"
             "## Report\n\n"
             "- Summary: one line\n"
             "- Risk: low, medium or high, from the blast radius\n"

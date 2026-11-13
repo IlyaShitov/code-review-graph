@@ -1749,7 +1749,9 @@ def query_graph(
             confidence = guessed_calls_confidence(resolution_split)
 
         if detail_level == "minimal":
-            result_fields: tuple[str, ...] = ("name", "kind", "file_path", "indirect")
+            result_fields: tuple[str, ...] = (
+                "name", "qualified_name", "kind", "file_path", "indirect",
+            )
             if pattern in ("inheritors_of", "tests_for"):
                 # Present only on the rows that are guesses, so a traced row
                 # pays nothing for it.
@@ -2094,7 +2096,7 @@ def semantic_search_nodes(
             minimal_results = [
                 {
                     k: r[k]
-                    for k in ("name", "kind", "file_path", "score")
+                    for k in ("name", "qualified_name", "kind", "file_path", "score")
                     if k in r
                 }
                 for r in results

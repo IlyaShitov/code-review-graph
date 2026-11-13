@@ -621,7 +621,7 @@ def test_mcp_query_wrapper_forwards_max_results(monkeypatch):
     underlying = tool or main_module.query_graph_tool
     # The wrapper is a coroutine: the query runs on a worker thread so
     # the stdio event loop stays answerable (#262).
-    result = asyncio.run(underlying("callers_of", "target", max_results=7))
+    result = asyncio.run(underlying("callers_of", "target", max_results=7, output_format="json"))
 
     assert result["status"] == "ok"
     assert captured["max_results"] == 7

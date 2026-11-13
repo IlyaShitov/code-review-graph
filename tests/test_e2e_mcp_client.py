@@ -215,6 +215,8 @@ def _payload(result: Any) -> dict[str, Any]:
 
 
 async def _call(session: Any, name: str, arguments: dict[str, Any] | None = None) -> Any:
+    if name in {"query_graph_tool", "semantic_search_nodes_tool"}:
+        arguments = {"output_format": "json", **(arguments or {})}
     return await asyncio.wait_for(
         session.call_tool(name, arguments or {}),
         timeout=CALL_TIMEOUT,

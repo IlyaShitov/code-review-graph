@@ -415,7 +415,10 @@ async def _session_call(server: dict, calls: list[tuple[str, dict]]) -> list[Any
         ) as session:
             await asyncio.wait_for(session.initialize(), timeout=CALL_TIMEOUT)
             return list(await asyncio.gather(*(
-                asyncio.wait_for(session.call_tool(name, args), timeout=CALL_TIMEOUT)
+                asyncio.wait_for(session.call_tool(
+                    name, {"output_format": "json", **args}
+                    if name in {"query_graph_tool", "semantic_search_nodes_tool"} else args,
+                ), timeout=CALL_TIMEOUT)
                 for name, args in calls
             )))
 

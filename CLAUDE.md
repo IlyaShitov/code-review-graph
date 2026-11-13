@@ -9,7 +9,7 @@ code-review-graph is a local-first knowledge graph for code review. It parses a 
 When using code-review-graph MCP tools:
 
 1. Call `get_minimal_context_tool(task="<description>")` first. It costs about 100 tokens and gives the overview.
-2. Use `detail_level="minimal"` unless that is not enough. Leave `semantic_search_nodes_tool(include_source=True)` and `get_review_context_tool` at standard, as minimal drops the source.
+2. For `query_graph_tool` and `semantic_search_nodes_tool`, use `detail_level="standard"` with `output_format="compact"` by default; reserve `minimal` for brief overviews. For other tools, use `minimal` when sufficient; keep `get_review_context_tool` at standard when source is needed.
 3. Prefer `query_graph_tool` with a specific target over broad `list_*` calls.
 4. Follow the `next_tool_suggestions` field in each response.
 5. Target: about 5 tool calls per task. Source snippets stand in for file reads.

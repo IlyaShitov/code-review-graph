@@ -975,7 +975,7 @@ def test_hard_ceilings_bind(repo):
 
     search = _invoke(
         crg_main.semantic_search_nodes_tool,
-        repo_root=root, query="helper", limit=HUGE,
+        repo_root=root, query="helper", limit=HUGE, output_format="json",
     )
     assert search["total"] > query._MAX_SEARCH_RESULTS_STANDARD
     assert len(search["results"]) == query._MAX_SEARCH_RESULTS_STANDARD
@@ -1061,7 +1061,7 @@ class TestTruncationContract:
     def test_semantic_search_reports_what_it_ranked(self, repo):
         result = _invoke(
             crg_main.semantic_search_nodes_tool,
-            repo_root=repo["root"], query="helper", limit=1,
+            repo_root=repo["root"], query="helper", limit=1, output_format="json",
         )
         assert len(result["results"]) == 1
         assert result["truncated"] is True
@@ -1082,7 +1082,7 @@ class TestTruncationContract:
         monkeypatch.setattr(search_mod, "_embedding_search", lambda *a, **k: [])
         result = _invoke(
             crg_main.semantic_search_nodes_tool,
-            repo_root=repo["root"], query="helper_0_0_0", limit=100,
+            repo_root=repo["root"], query="helper_0_0_0", limit=100, output_format="json",
         )
         assert result["truncated"] is False
         assert result["total"] == len(result["results"]) > 0
@@ -1122,7 +1122,7 @@ class TestTruncationContract:
         result = _invoke(
             crg_main.semantic_search_nodes_tool,
             repo_root=repo["root"], query="helper", limit=HUGE,
-            detail_level="minimal",
+            detail_level="minimal", output_format="json",
         )
         assert len(result["results"]) == query._MAX_SEARCH_RESULTS_MINIMAL
         assert result["truncated"] is True
