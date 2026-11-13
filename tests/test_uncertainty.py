@@ -389,7 +389,8 @@ def test_search_zero_hits_is_qualified(repo):
     result = semantic_search_nodes(query="zzz_no_such_symbol", repo_root=str(repo))
 
     assert result["results"] == []
-    assert "search covers names" in result["confidence"]
+    assert "not proof of absence" in result["confidence"]
+    assert "no indexed node matches" not in result["confidence"]
 
 
 def test_search_on_an_empty_graph_says_so(tmp_path):

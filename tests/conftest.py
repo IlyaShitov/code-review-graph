@@ -136,3 +136,31 @@ def pytest_collection_modifyitems(config, items):
                     pytest.mark.skip(reason=f"opt-in suite; run with -m {name}")
                 )
                 break
+
+
+@pytest.fixture
+def search_store(tmp_path, monkeypatch):
+    """A real SQLite graph with model downloads disabled for search regressions."""
+    from code_review_graph import embeddings
+    from code_review_graph.graph import GraphStore
+
+    monkeypatch.setattr(embeddings, "get_provider", lambda *args, **kwargs: None)
+    with GraphStore(tmp_path / "search.db") as store:
+        yield store
+
+
+@pytest.fixture
+def crowded_search_store(search_store):
+    """Low-ranked classes behind functions which exhaust a small candidate window."""
+    from code_review_graph.parser import NodeInfo
+    from code_review_graph.search import rebuild_fts_index
+
+    for index in range(30):
+        search_store.upsert_node(NodeInfo("Function", "trip", f"/repo/trip/{index}.py", 1, 2))
+    for name in ("TripVehicle", "TripStop"):
+        search_store.upsert_node(NodeInfo(
+            "Class", name, f"/repo/models/{name}.py", 1, 20,
+            extra={"docstring": "long description " * 100},
+        ))
+    rebuild_fts_index(search_store)
+    return search_store

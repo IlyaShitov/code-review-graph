@@ -1028,7 +1028,7 @@ def hybrid_search(
     Returns:
         List of dicts with node metadata and ``score`` field.
     """
-    if not query or not query.strip():
+    if not query or not query.strip() or limit <= 0:
         if _out_mode is not None:
             _out_mode.append("none")
         return []
@@ -1038,6 +1038,22 @@ def hybrid_search(
     # access for batch-fetch performance.  This is documented coupling.
     conn = store._conn
     fetch_limit = limit * 3  # Fetch extra to allow for boosting
+    kind_boosts = detect_query_kind_boost(query)
+    exact_ids: list[int] = []
+    exact_name = kind_boosts.get("_exact_name")
+    if exact_name:
+        # Exact names must not depend on their rank in the bounded candidate pool.
+        sql = "SELECT id FROM nodes WHERE name = ? COLLATE NOCASE"
+        params: list[str | int] = [exact_name]
+        if kind:
+            sql += " AND kind = ?"
+            params.append(kind)
+        else:
+            sql += " AND kind != ?"
+            params.append(_UNSEARCHED_KIND)
+        sql += " ORDER BY qualified_name LIMIT ?"
+        params.append(limit)
+        exact_ids = [row[0] for row in conn.execute(sql, params)]
 
     # ------ Phase 1: Gather ranked lists ------
     fts_results: list[tuple[int, float]] = []
@@ -1077,7 +1093,7 @@ def hybrid_search(
     else:
         # Fallback: keyword LIKE matching
         keyword_results = _keyword_search(conn, query, limit=fetch_limit, kind=kind)
-        if not keyword_results:
+        if not keyword_results and not exact_ids:
             if _out_mode is not None:
                 _out_mode.append("none")
             return []
@@ -1085,8 +1101,12 @@ def hybrid_search(
             _out_mode.append("keyword")
         merged = keyword_results
 
+    candidate_scores = dict(merged)
+    for node_id, score in rrf_merge([(node_id, 1.0) for node_id in exact_ids]):
+        candidate_scores.setdefault(node_id, score)
+    merged = list(candidate_scores.items())
+
     # ------ Phase 3+4: Batch-fetch nodes, apply boosting and kind filter ------
-    kind_boosts = detect_query_kind_boost(query)
     # Stored file paths use POSIX separators (#774); bridge native spellings.
     context_set = (
         {normalize_file_path(p) for p in context_files} if context_files else set()
@@ -1169,7 +1189,7 @@ def hybrid_search(
 
         boosted.append((node_id, score * boost))
 
-    boosted.sort(key=lambda x: x[1], reverse=True)
+    boosted.sort(key=lambda x: (x[0] in exact_ids, x[1]), reverse=True)
 
     # Build results from the already-fetched rows
     results: list[dict[str, Any]] = []

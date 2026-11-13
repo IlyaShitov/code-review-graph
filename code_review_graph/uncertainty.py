@@ -566,9 +566,9 @@ def empty_search_confidence(
             return _bounded(stale)
 
         return _bounded(_interpolated(
-            "no indexed node matches '",
+            "no results returned for '",
             query,
-            "'; search covers names, paths and signatures, not source text",
+            "'; bounded search and filters are not proof of absence; source text is not searched",
         ))
     except Exception:
         logger.debug("Could not compute empty-search confidence", exc_info=True)
