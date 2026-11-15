@@ -17402,11 +17402,13 @@ class CodeParser:
             # For Verilog module instantiations and Julia module-level calls,
             # create CALLS edges from the enclosing module. Julia needs this
             # lexical source so same-file resolution can find module members.
+            # A Python class body (``items = ItemSerializer(many=True)``)
+            # belongs to the class, so impact walks continue to its users.
             if enclosing_func:
                 caller = self._qualify(
                     enclosing_func, file_path, enclosing_class,
                 )
-            elif language in ("verilog", "julia") and enclosing_class:
+            elif language in ("verilog", "julia", "python") and enclosing_class:
                 caller = self._qualify(
                     enclosing_class, file_path, None
                 )
@@ -19115,9 +19117,12 @@ class CodeParser:
         imap = import_map or {}
         dnames = defined_names or set()
 
-        # Use enclosing function as source, or the file path for module-scope code.
+        # Use enclosing function as source, the class for a Python class body,
+        # or the file path for module-scope code.
         if enclosing_func:
             caller = self._qualify(enclosing_func, file_path, enclosing_class)
+        elif language == "python" and enclosing_class:
+            caller = self._qualify(enclosing_class, file_path, None)
         else:
             caller = file_path
 
@@ -19229,13 +19234,22 @@ class CodeParser:
         import_map: dict[str, str],
         defined_names: set[str],
     ) -> None:
-        """Extract REFERENCES from ``obj.key = fnRef`` or ``obj['key'] = fnRef``."""
+        """Extract REFERENCES from ``obj.key = fnRef`` or ``obj['key'] = fnRef``.
+
+        Python also binds plain names: ``serializer_class = ItemSerializer``
+        in a class body is how Django/DRF wire a class in, with no call.
+        """
         children = assign_node.children
         if len(children) < 3:
             return
         lhs = children[0]
         # LHS must be a member_expression or subscript_expression (map assignment).
-        if lhs.type not in (
+        python_binding = (
+            language == "python"
+            and assign_node.type == "assignment"
+            and lhs.type == "identifier"
+        )
+        if not python_binding and lhs.type not in (
             "member_expression", "subscript_expression",
             "attribute", "subscript",
         ):

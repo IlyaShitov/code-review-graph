@@ -663,6 +663,57 @@ class TestQueryGraphCallTargetFallbacks:
         }
         assert {edge["kind"] for edge in result["edges"]} == {"REFERENCES"}
 
+    def test_references_to_class_includes_instantiations(self, monkeypatch):
+        """A class that is only constructed or bound in a class body is used.
+
+        references_to on a class returned 0 and called it a real absence
+        when every use was ``Notifier()`` (a CALLS edge) or a DRF-style
+        ``notifier_class = Notifier`` binding.
+        """
+        monkeypatch.setenv("CRG_SERIAL_PARSE", "1")
+        model_path = self.root / "notifiers.py"
+        usecase_path = self.root / "usecases.py"
+        view_path = self.root / "views.py"
+        model_path.write_text("class Notifier:\n    pass\n", encoding="utf-8")
+        usecase_path.write_text(
+            "from notifiers import Notifier\n"
+            "\n"
+            "def notify():\n"
+            "    return Notifier()\n",
+            encoding="utf-8",
+        )
+        view_path.write_text(
+            "from notifiers import Notifier\n"
+            "\n"
+            "class NotifyView:\n"
+            "    notifier_class = Notifier\n",
+            encoding="utf-8",
+        )
+        with GraphStore(self.db_path) as store:
+            build = full_build(self.root, store)
+            assert build["errors"] == []
+
+        target = f"{model_path.as_posix()}::Notifier"
+        result = query_graph(
+            pattern="references_to", target=target, repo_root=str(self.root),
+        )
+
+        assert result["status"] == "ok"
+        assert {
+            (row["qualified_name"], edge["kind"])
+            for row, edge in zip(result["results"], result["edges"])
+        } == {
+            (f"{usecase_path.as_posix()}::notify", "CALLS"),
+            (f"{view_path.as_posix()}::NotifyView", "REFERENCES"),
+        }
+
+        callers = query_graph(
+            pattern="callers_of", target=target, repo_root=str(self.root),
+        )
+        assert {row["qualified_name"] for row in callers["results"]} == {
+            f"{usecase_path.as_posix()}::notify",
+        }
+
     @pytest.mark.parametrize("detail_level", ["standard", "minimal"])
     @pytest.mark.parametrize("ambiguous", [False, True])
     def test_references_to_includes_alias_imported_dependents(

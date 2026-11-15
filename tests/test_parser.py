@@ -1,6 +1,7 @@
 """Tests for the Tree-sitter parser module."""
 
 import ast
+import re
 import tempfile
 from pathlib import Path
 
@@ -810,6 +811,53 @@ class Plain:
             )
         finally:
             tmp.unlink()
+
+    def test_python_class_body_usage_attributed_to_class(self):
+        """Class-body calls and bindings belong to the class, not the File.
+
+        ``items = ItemSerializer(many=True)``, ``filterset_class = ItemFilter``
+        and ``permission_classes = [IsOwner]`` are how a DRF class depends on
+        another; attributing them to the File cut impact walks at the module.
+        """
+        source = (
+            b"from filters import ItemFilter\n"
+            b"from permissions import IsOwner\n"
+            b"from serializers import ItemSerializer\n"
+            b"\n"
+            b"class OrderSerializer:\n"
+            b"    items = ItemSerializer(many=True)\n"
+            b"\n"
+            b"class OrderViewSet:\n"
+            b"    filterset_class = ItemFilter\n"
+            b"    permission_classes = [IsOwner]\n"
+            b"\n"
+            b"default_filter = ItemFilter\n"
+        )
+        path = Path("views.py")
+        _, edges = self.parser.parse_bytes(path, source)
+        uses = {
+            (e.kind, e.source, re.split(r"::|\.", e.target)[-1], e.line)
+            for e in edges if e.kind in ("CALLS", "REFERENCES")
+        }
+        serializer = f"{path}::OrderSerializer"
+        viewset = f"{path}::OrderViewSet"
+        assert ("CALLS", serializer, "ItemSerializer", 6) in uses
+        assert ("REFERENCES", viewset, "ItemFilter", 9) in uses
+        assert ("REFERENCES", viewset, "IsOwner", 10) in uses
+        # Module scope keeps the File as the source.
+        assert ("REFERENCES", str(path), "ItemFilter", 12) in uses
+
+    def test_python_plain_binding_needs_known_name(self):
+        """A plain ``name = value`` binds a reference only to a known symbol."""
+        source = (
+            b"class Settings:\n"
+            b"    timeout = default_timeout\n"
+            b"    retries: int\n"
+            b"    total = 0\n"
+            b"    total += extra\n"
+        )
+        _, edges = self.parser.parse_bytes(Path("settings_mod.py"), source)
+        assert not [e for e in edges if e.kind == "REFERENCES"]
 
     def test_module_scope_calls_in_notebook(self):
         """Notebook code cells are entirely module-scope — every call inside

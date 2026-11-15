@@ -1281,7 +1281,7 @@ def query_graph(
 
         qn = node.qualified_name if node else target
 
-        if pattern == "callers_of":
+        def add_callers() -> None:
             # Sources reached through the qualified target. A source found
             # here is proven, so the bare-name fallback below must not also
             # claim it; repeated calls from one source stay separate rows.
@@ -1339,7 +1339,15 @@ def query_graph(
                             certain=False,
                         )
 
+        if pattern == "callers_of":
+            add_callers()
+
         elif pattern == "references_to":
+            # Instantiating a class is a use of it too; without these rows a
+            # class that is only constructed reads as unreferenced. Each row
+            # keeps its edge kind, so a call is still told from a reference.
+            if node and node.kind == "Class":
+                add_callers()
             seen_reference_sources: set[str] = set()
             for e in store.iter_edges_by_target(qn):
                 if e.kind != "REFERENCES":
