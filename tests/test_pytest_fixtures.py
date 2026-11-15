@@ -140,6 +140,16 @@ FILES = {
         def test_uses_global(item_list, shadowed):
             pass
     """,
+    "other/tests/test_nested.py": """\
+        import pytest
+
+
+        class TestOuter:
+            @pytest.mark.usefixtures("root_only")
+            class TestInner:
+                def test_x(self):
+                    pass
+    """,
     "other/tests/cycle_a.py": """\
         import pytest
 
@@ -222,6 +232,9 @@ EXPECTED = {
     ("other/tests/test_other.py::test_uses_global", "conftest.py::shadowed", 1, "fixture"),
     # The mock from `patch` takes the first parameter, so `item` is no fixture here.
     (f"{TESTS}::test_patched", f"{TESTS}::local", 53, "fixture"),
+    # A mark on a nested class reaches its tests, keyed by the bare class name
+    # their parent carries.
+    ("other/tests/test_nested.py::TestInner.test_x", "conftest.py::root_only", 7, "fixture"),
     # Star imports that loop back still carry each module's fixtures to the other.
     ("other/tests/test_cycle_a.py::test_sees_b", "other/tests/cycle_b.py::fx_b", 4, "fixture"),
     ("other/tests/test_cycle_b.py::test_sees_a", "other/tests/cycle_a.py::fx_a", 4, "fixture"),
