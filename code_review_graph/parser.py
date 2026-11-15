@@ -17408,7 +17408,11 @@ class CodeParser:
                 caller = self._qualify(
                     enclosing_func, file_path, enclosing_class,
                 )
-            elif language in ("verilog", "julia", "python") and enclosing_class:
+            elif language == "python" and enclosing_class:
+                caller = self._python_class_body_owner(
+                    child, enclosing_class, file_path,
+                )
+            elif language in ("verilog", "julia") and enclosing_class:
                 caller = self._qualify(
                     enclosing_class, file_path, None
                 )
@@ -19122,7 +19126,7 @@ class CodeParser:
         if enclosing_func:
             caller = self._qualify(enclosing_func, file_path, enclosing_class)
         elif language == "python" and enclosing_class:
-            caller = self._qualify(enclosing_class, file_path, None)
+            caller = self._python_class_body_owner(child, enclosing_class, file_path)
         else:
             caller = file_path
 
@@ -19236,8 +19240,10 @@ class CodeParser:
     ) -> None:
         """Extract REFERENCES from ``obj.key = fnRef`` or ``obj['key'] = fnRef``.
 
-        Python also binds plain names: ``serializer_class = ItemSerializer``
-        in a class body is how Django/DRF wire a class in, with no call.
+        Python also binds plain names, wherever they appear: in a class body
+        (``serializer_class = ItemSerializer``, how Django/DRF wire a class in
+        with no call), in a function (``handler = process_item``) and at
+        module level. Only a name imported or defined in the file counts.
         """
         children = assign_node.children
         if len(children) < 3:
@@ -22886,6 +22892,31 @@ class CodeParser:
         if enclosing_class:
             return f"{file_path}::{enclosing_class}.{name}"
         return f"{file_path}::{name}"
+
+    def _python_class_body_owner(
+        self, ts_node, enclosing_class: str, file_path: str,
+    ) -> str:
+        """Identity of the Class node whose body holds *ts_node*.
+
+        A nested class is stored under its immediate parent
+        (``Serializer.Meta``), but ``enclosing_class`` carries the bare name;
+        an edge from ``file::Meta`` names no node and every query drops it.
+        """
+        owner_seen = False
+        current = ts_node.parent
+        while current is not None and current.type != "function_definition":
+            if current.type == "class_definition":
+                if owner_seen:
+                    parent = current.child_by_field_name("name")
+                    if parent is not None:
+                        return self._qualify(
+                            enclosing_class, file_path,
+                            parent.text.decode("utf-8", errors="replace"),
+                        )
+                    break
+                owner_seen = True
+            current = current.parent
+        return self._qualify(enclosing_class, file_path, None)
 
     def _node_qualified(self, node: NodeInfo) -> str:
         """Return the parser identity for a node without changing display name."""

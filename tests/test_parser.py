@@ -847,6 +847,34 @@ class Plain:
         # Module scope keeps the File as the source.
         assert ("REFERENCES", str(path), "ItemFilter", 12) in uses
 
+    def test_python_nested_class_body_usage_attributed_to_nested_class(self):
+        """``class Meta`` uses keep the source its Class node is stored under.
+
+        The bare ``Meta`` named no node, so every query dropped the edge:
+        ``model = Item`` and ``validators = [Unique()]`` in a serializer's Meta
+        never showed up for ``Item`` or ``Unique``.
+        """
+        source = (
+            b"from models import Item\n"
+            b"from validators import Unique\n"
+            b"\n"
+            b"class ItemSerializer:\n"
+            b"    class Meta:\n"
+            b"        model = Item\n"
+            b"        validators = [Unique()]\n"
+        )
+        path = Path("serializers.py")
+        nodes, edges = self.parser.parse_bytes(path, source)
+        meta = next(n for n in nodes if n.kind == "Class" and n.name == "Meta")
+        meta_qn = self.parser._node_qualified(meta)
+        assert meta_qn == f"{path}::ItemSerializer.Meta"
+        uses = {
+            (e.kind, e.source, re.split(r"::|\.", e.target)[-1], e.line)
+            for e in edges if e.kind in ("CALLS", "REFERENCES")
+        }
+        assert ("REFERENCES", meta_qn, "Item", 6) in uses
+        assert ("CALLS", meta_qn, "Unique", 7) in uses
+
     def test_python_plain_binding_needs_known_name(self):
         """A plain ``name = value`` binds a reference only to a known symbol."""
         source = (
