@@ -875,6 +875,37 @@ class Plain:
         assert ("REFERENCES", meta_qn, "Item", 6) in uses
         assert ("CALLS", meta_qn, "Unique", 7) in uses
 
+    def test_python_class_in_function_body_usage_attributed_to_class(self):
+        """A class declared in a method is stored under the method's class.
+
+        The owner walk stopped at the function, so ``Local`` lost its
+        ``Outer.`` prefix and its body's edges named no node.
+        """
+        source = (
+            b"from validators import Unique\n"
+            b"\n"
+            b"class Outer:\n"
+            b"    def build(self):\n"
+            b"        class Local:\n"
+            b"            items = Unique()\n"
+            b"        return Local\n"
+            b"\n"
+            b"def make():\n"
+            b"    class Free:\n"
+            b"        items = Unique()\n"
+            b"    return Free\n"
+        )
+        path = Path("factories.py")
+        nodes, edges = self.parser.parse_bytes(path, source)
+        classes = {
+            n.name: self.parser._node_qualified(n) for n in nodes if n.kind == "Class"
+        }
+        assert classes["Local"] == f"{path}::Outer.Local"
+        assert classes["Free"] == f"{path}::Free"
+        calls = {(e.source, e.line) for e in edges if e.kind == "CALLS"}
+        assert (classes["Local"], 6) in calls
+        assert (classes["Free"], 11) in calls
+
     def test_python_plain_binding_needs_known_name(self):
         """A plain ``name = value`` binds a reference only to a known symbol."""
         source = (

@@ -22898,13 +22898,15 @@ class CodeParser:
     ) -> str:
         """Identity of the Class node whose body holds *ts_node*.
 
-        A nested class is stored under its immediate parent
-        (``Serializer.Meta``), but ``enclosing_class`` carries the bare name;
-        an edge from ``file::Meta`` names no node and every query drops it.
+        A nested class is stored under the nearest class around it
+        (``Serializer.Meta``), even across a method (``Outer.Local`` for a
+        class declared in ``Outer.build``), but ``enclosing_class`` carries
+        the bare name; an edge from ``file::Meta`` names no node and every
+        query drops it.
         """
         owner_seen = False
         current = ts_node.parent
-        while current is not None and current.type != "function_definition":
+        while current is not None:
             if current.type == "class_definition":
                 if owner_seen:
                     parent = current.child_by_field_name("name")
