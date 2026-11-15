@@ -37,6 +37,7 @@ from .constants import (
 )
 from .csharp_resolver import restore_csharp_references
 from .django_enricher.enrich import enrich_django
+from .pytest_fixtures import link_pytest_fixtures
 from .errors import ChangeDiscoveryError, GraphRootMismatchError, GraphStoreError
 from .graph import GraphStore
 from .locking import WriteLock, write_lock_path
@@ -3125,6 +3126,7 @@ def full_build(
     _relink_stored_edges(store, repo_root, followed_dirs)
     _refresh_target_resolution(store)
     django_stats = enrich_django(store, repo_root)
+    pytest_stats = link_pytest_fixtures(store, repo_root)
     store.set_metadata(_DEPENDENTS_PENDING_KEY, "[]")
     # Storing is over: every file that could be parsed has its rows. Recorded
     # before the anchor and before post-processing, so a process killed from
@@ -3152,6 +3154,7 @@ def full_build(
         "scoped_resolution": scoped_stats,
         "jedi_enrichment": jedi_stats,
         "django_enrichment": django_stats,
+        "pytest_fixtures": pytest_stats,
     }
 
 
@@ -3358,6 +3361,7 @@ def incremental_update(
             "errors": [],
             "freshness_advanced": False,
             "django_enrichment": enrich_django(store, repo_root),
+            "pytest_fixtures": link_pytest_fixtures(store, repo_root),
         }
 
     # Find dependent files (files that import from changed files)
@@ -3660,6 +3664,7 @@ def incremental_update(
     if has_graph_changes or scoped_changed:
         _refresh_target_resolution(store)
     django_stats = enrich_django(store, repo_root)
+    pytest_stats = link_pytest_fixtures(store, repo_root)
 
     # Freshness follows what was stored. A file that failed to parse is
     # reported in ``errors`` and keeps its previous rows; it must not stop the
@@ -3708,6 +3713,7 @@ def incremental_update(
         "scoped_resolution": scoped_stats,
         "jedi_enrichment": jedi_stats,
         "django_enrichment": django_stats,
+        "pytest_fixtures": pytest_stats,
         **({"identity_rebuild": True} if csharp_upgrade else {}),
     }
 
