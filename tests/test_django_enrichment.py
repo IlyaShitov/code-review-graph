@@ -158,3 +158,36 @@ def test_noop_update_preserves_constant_identity_and_community(django_repo):
         after = tuple(store._conn.execute(query).fetchone())
         assert after[0] == before[0]
         assert after[1] is not None
+
+
+def test_recipe_reference_has_one_edge_from_recipe_after_reparse(django_repo, monkeypatch):
+    """
+    `foreign_key(base)` на рецепт другого модуля — одно ребро от рецепта, в том числе после
+    полной сборки и после разбора файла, где объявлен `base`: ребро парсера от файла не дублирует
+    ссылку.
+    """
+    recipe_import = "from model_bakery.recipe import Recipe, foreign_key\n"
+    (django_repo / "base_recipes.py").write_text(f"{recipe_import}\nbase = Recipe('shop.Item')\n")
+    (django_repo / "derived_recipes.py").write_text(
+        f"{recipe_import}from base_recipes import base\n\n"
+        "derived = Recipe(\n    'shop.Order',\n    item=foreign_key(base),\n)\n"
+    )
+    monkeypatch.setattr(
+        "code_review_graph.incremental.get_all_tracked_files",
+        lambda *args, **kwargs: ["manage.py", "base_recipes.py", "derived_recipes.py"],
+    )
+    edges_query = (
+        "SELECT source_qualified FROM edges WHERE kind = 'REFERENCES' AND target_qualified = ?"
+    )
+    target = f"{django_repo}/base_recipes.py::base"
+    derived = f"{django_repo}/derived_recipes.py::derived"
+    with GraphStore(django_repo / "custom.db") as store:
+        result = full_build(django_repo, store)
+        _run_postprocess(store, result, "minimal", full_rebuild=True)
+        assert [row[0] for row in store._conn.execute(edges_query, (target,))] == [derived]
+
+        path = django_repo / "base_recipes.py"
+        path.write_text(path.read_text() + "\nother = Recipe('shop.Item')\n")
+        result = incremental_update(django_repo, store, changed_files=["base_recipes.py"])
+        _run_postprocess(store, result, "minimal", changed_files=["base_recipes.py"])
+        assert [row[0] for row in store._conn.execute(edges_query, (target,))] == [derived]

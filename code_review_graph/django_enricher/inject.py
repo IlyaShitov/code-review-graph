@@ -9,9 +9,12 @@ import time
 from collections import Counter, defaultdict
 from typing import Final
 
+from code_review_graph.constants import CLAIMED_ENDPOINT_KEY
+
 from .resolve import INSERTED_RULES, RULE_CONSTANT, ConstantNode, Resolved
 
 RULE_CONTAINS: Final[str] = "contains"
+CLAIMED_ENDPOINT_PATH: Final[str] = f"$.{CLAIMED_ENDPOINT_KEY}"
 
 
 def _insert_constants(con: sqlite3.Connection, constants: list[ConstantNode], now: float) -> None:
@@ -109,22 +112,37 @@ def apply(
         extra = {"resolver": "django", "rule": item.rule}
         if item.rule in INSERTED_RULES:
             kind = "REFERENCES" if item.rule == RULE_CONSTANT else "CALLS"
-            exists = con.execute(
-                "select 1 from edges where +kind = ? and file_path = ? and line = ? and "
-                "target_qualified = ?",
-                (kind, item.file, item.line, item.target),
-            ).fetchone()
-            if exists:
-                stats["insert_skipped_exists"] += 1
-                continue
-            # источник — самый узкий узел, в который попадает строка: метод, функция или класс
-            # (тело класса)
+            # источник — самый узкий узел, в который попадает строка: метод, функция, класс
+            # (тело класса) или константа (значение константы, рецепта)
             source = con.execute(
                 "select qualified_name from nodes where file_path = ? and kind in ('Function', "
-                "'Test', 'Class') "
+                "'Test', 'Class', 'Constant') "
                 "and line_start <= ? and line_end >= ? order by line_end - line_start limit 1",
                 (item.file, item.line, item.line),
             ).fetchone()
+            # то же ребро от парсера: привязанное или ещё голое (`base`) — такое постобработка
+            # привяжет к `claimed_endpoint` уже после обогащения
+            existing = con.execute(
+                "select id, source_qualified, target_qualified from edges where +kind = ? and "
+                "file_path = ? and line = ? and (target_qualified = ? or "
+                "(+target_resolution = 'unresolved' and json_extract(extra, ?) = ?))",
+                (kind, item.file, item.line, item.target, CLAIMED_ENDPOINT_PATH, item.target),
+            ).fetchone()
+            if existing:
+                edge_id, edge_source, edge_target = existing
+                # на уровне модуля парсер ведёт ребро от файла: узла под значение константы у
+                # него нет
+                new_source = source[0] if source and edge_source == item.file else edge_source
+                if (new_source, edge_target) == (edge_source, item.target):
+                    stats["insert_skipped_exists"] += 1
+                    continue
+                con.execute(
+                    "update edges set source_qualified = ?, target_qualified = ?, "
+                    "target_resolution = 'direct', extra = json_remove(extra, ?) where id = ?",
+                    (new_source, item.target, CLAIMED_ENDPOINT_PATH, edge_id),
+                )
+                stats["existing_rebound"] += 1
+                continue
             if item.via:
                 extra["via"] = item.via
             con.execute(

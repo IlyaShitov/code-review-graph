@@ -140,6 +140,34 @@ def workspace(tmp_path_factory: pytest.TempPathFactory) -> Path:
                 SHOP_TITLE = 'локальный'
                 return SHOP_TITLE
         ''',
+        "proj/apps/shop/baker_recipes.py": """
+            from model_bakery.recipe import Recipe, foreign_key
+
+            from apps.shop.models import Item, Order
+
+            order = Recipe(Order)
+            item = Recipe(
+                Item,
+                order=foreign_key(order),
+            )
+            cheap_item = item.extend(title='Дешёвый')
+            item_titles = list()
+        """,
+        "proj/apps/shop/recipes_usage.py": """
+            from apps.shop import baker_recipes as shop_recipes
+            from apps.shop.baker_recipes import item
+
+            not_a_recipe = item.extend(title='без импорта Recipe')
+
+
+            def make_items():
+                shop_recipes.cheap_item.make()
+                return item.make()
+
+
+            def shadowed(item):
+                return item
+        """,
         "proj/apps/shop/filters.py": """
             from dataclasses import dataclass
 

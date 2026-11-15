@@ -91,18 +91,23 @@ def test_chain_edges_use_chain_start_line(resolved: list[Resolved], workspace: P
 def test_constant_refs(resolved: list[Resolved]) -> None:
     """
     Импорт, `module.CONST`, свой модуль и тело класса — да; локальная переменная с тем же именем
-    — нет.
+    — нет. Рецепты baker — так же: `foreign_key(x)`, `x.extend()`, `recipes.x.make()`.
     """
     got = {
-        (Path(r.file).name, r.scope, r.target.split("/")[-1])
+        (Path(r.file).name, r.line, r.scope, r.target.split("/")[-1])
         for r in resolved
         if r.rule == RULE_CONSTANT
     }
 
     assert got == {
-        ("permissions.py", "", "permissions.py::SHOP_FULL_PERMISSION"),
-        ("report.py", "ShopReport", "permissions.py::SHOP_FULL_PERMISSION"),
-        ("report.py", "ShopReport.title", "permissions.py::SHOP_TITLE"),
+        ("permissions.py", 5, "", "permissions.py::SHOP_FULL_PERMISSION"),
+        ("report.py", 9, "ShopReport", "permissions.py::SHOP_FULL_PERMISSION"),
+        ("report.py", 12, "ShopReport.title", "permissions.py::SHOP_TITLE"),
+        ("baker_recipes.py", 8, "", "baker_recipes.py::order"),
+        ("baker_recipes.py", 10, "", "baker_recipes.py::item"),
+        ("recipes_usage.py", 4, "", "baker_recipes.py::item"),
+        ("recipes_usage.py", 8, "make_items", "baker_recipes.py::cheap_item"),
+        ("recipes_usage.py", 9, "make_items", "baker_recipes.py::item"),
     }
 
 
@@ -122,6 +127,9 @@ def test_labels(index: Index) -> None:
         ),
         "SHOP_TITLE": ("SHOP_TITLE = 'Магазины'", "Магазины"),
         "ALL_PERMISSIONS": ("ALL_PERMISSIONS = [SHOP_FULL_PERMISSION]", ""),
+        "order": ("order = Recipe(Order)", ""),
+        "item": ("item = Recipe(Item, order=foreign_key(order))", ""),
+        "cheap_item": ("cheap_item = item.extend(title='Дешёвый')", "title: Дешёвый"),
     }
     assert docstrings == {
         "ShopReport": 'Отчёт по магазинам.\nname: Отчёт "Магазины"',

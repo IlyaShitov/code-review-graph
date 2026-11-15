@@ -34,6 +34,7 @@ SELF_ANNOTATIONS: Final[frozenset[str]] = frozenset(
 )
 # Django остаётся внешним именем: распознавание кверисетов держится на его базовом `QuerySet`
 OPAQUE_PACKAGES: Final[frozenset[str]] = frozenset({"django"})
+BAKER_RECIPE: Final[str] = "model_bakery.recipe.Recipe"
 
 
 def walk_local(node: ast.AST) -> Iterator[ast.AST]:
@@ -67,6 +68,20 @@ def _dotted_name(expr: ast.AST) -> str | None:
         head = _dotted_name(expr.value)
         return f"{head}.{expr.attr}" if head else None
     return None
+
+
+def _is_recipe(value: ast.expr, imports: dict[str, str]) -> bool:
+    """
+    Рецепт model_bakery: `Recipe(...)` или `<рецепт>.extend(...)` в модуле, импортирующем
+    `Recipe`. База `extend` не проверяется: присваивать результат `list.extend` бессмысленно.
+    Ссылки на рецепт (`recipes.x.make()`, `foreign_key(x)`) разрешаются как на константу.
+    """
+    if not isinstance(value, ast.Call) or BAKER_RECIPE not in imports.values():
+        return False
+    func = value.func
+    if isinstance(func, ast.Name):
+        return imports.get(func.id) == BAKER_RECIPE
+    return isinstance(func, ast.Attribute) and func.attr == "extend"
 
 
 def _self_return_chains(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[list[str]] | None:
@@ -236,7 +251,10 @@ class Index:
                     len(targets) == 1
                     and isinstance(targets[0], ast.Name)
                     and node.value is not None
-                    and re.fullmatch(r"_?[A-Z][A-Z0-9_]+", targets[0].id)
+                    and (
+                        re.fullmatch(r"_?[A-Z][A-Z0-9_]+", targets[0].id)
+                        or _is_recipe(node.value, module.imports)
+                    )
                 ):
                     name = targets[0].id
                     module.constants[name] = ConstantInfo(
