@@ -11,7 +11,7 @@ from typing import Final
 
 from code_review_graph.constants import CLAIMED_ENDPOINT_KEY
 
-from .resolve import INSERTED_RULES, RULE_CONSTANT, ConstantNode, Resolved
+from .resolve import INSERTED_RULES, RULE_PERMISSION, ConstantNode, Resolved
 
 RULE_CONTAINS: Final[str] = "contains"
 CLAIMED_ENDPOINT_PATH: Final[str] = f"$.{CLAIMED_ENDPOINT_KEY}"
@@ -111,7 +111,8 @@ def apply(
             continue
         extra = {"resolver": "django", "rule": item.rule}
         if item.rule in INSERTED_RULES:
-            kind = "REFERENCES" if item.rule == RULE_CONSTANT else "CALLS"
+            # фильтр прав вызывает метод кверисета; константа и запись beat — ссылки
+            kind = "CALLS" if item.rule == RULE_PERMISSION else "REFERENCES"
             # источник — самый узкий узел, в который попадает строка: метод, функция, класс
             # (тело класса) или константа (значение константы, рецепта)
             source = con.execute(

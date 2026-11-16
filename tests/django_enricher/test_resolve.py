@@ -2,10 +2,12 @@ from pathlib import Path
 
 from code_review_graph.django_enricher.index import Index
 from code_review_graph.django_enricher.resolve import (
+    RULE_BEAT,
     RULE_CHAIN,
     RULE_CONSTANT,
     RULE_MRO,
     RULE_PERMISSION,
+    RULE_TASK,
     Resolved,
     class_docstrings,
     constant_nodes,
@@ -20,7 +22,7 @@ def test_resolved_edges(resolved: list[Resolved]) -> None:
     got = {
         (r.scope, r.name, r.target.split("::")[1], r.rule, r.via)
         for r in resolved
-        if r.rule != RULE_CONSTANT
+        if r.rule not in (RULE_CONSTANT, RULE_TASK, RULE_BEAT)
     }
 
     assert got == {
@@ -135,4 +137,26 @@ def test_labels(index: Index) -> None:
         "ShopReport": 'Отчёт по магазинам.\nname: Отчёт "Магазины"',
         "ItemStatus": "ACTIVE: ACTIVE, Активен",
         "Item": "title: Название\nMeta.verbose_name: Товар",
+    }
+
+
+def test_celery_refs(resolved: list[Resolved]) -> None:
+    """
+    `.delay`, `.apply_async`, `.s` по импорту, через модуль и из лямбды — вызов таски; параметр
+    функции или лямбды с тем же именем и не-таска — нет. Beat находит таску по имени регистрации:
+    литералу `name=` или пути к функции; таску с вычисляемым именем и внешнюю — нет.
+    """
+    got = {
+        (Path(r.file).name, r.line, r.scope, r.name, r.target.split("::")[1], r.rule)
+        for r in resolved
+        if r.rule in (RULE_TASK, RULE_BEAT)
+    }
+
+    assert got == {
+        ("task_usage.py", 8, "run_tasks", "delay", "sync_items", RULE_TASK),
+        ("task_usage.py", 9, "run_tasks", "apply_async", "renamed_task", RULE_TASK),
+        ("task_usage.py", 10, "run_tasks", "delay", "cleanup", RULE_TASK),
+        ("task_usage.py", 11, "run_tasks", "s", "computed_name_task", RULE_TASK),
+        ("schedule.py", 2, "", "sync_items", "sync_items", RULE_BEAT),
+        ("schedule.py", 3, "", "renamed_task", "renamed_task", RULE_BEAT),
     }

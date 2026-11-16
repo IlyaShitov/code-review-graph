@@ -84,6 +84,26 @@ def _is_recipe(value: ast.expr, imports: dict[str, str]) -> bool:
     return isinstance(func, ast.Attribute) and func.attr == "extend"
 
 
+def _task_name(fn: ast.FunctionDef | ast.AsyncFunctionDef, module_name: str) -> str | None:
+    """
+    Имя, под которым Celery регистрирует таску (`@app.task`, `@app.task(...)`, `@shared_task`):
+    литерал `name=` или `модуль.функция`. Пустая строка — таска с вычисляемым именем, None — не
+    таска.
+    """
+    for decorator in fn.decorator_list:
+        call = decorator if isinstance(decorator, ast.Call) else None
+        dotted = _dotted_name(call.func if call else decorator)
+        if dotted is None or dotted.rpartition(".")[2] not in ("task", "shared_task"):
+            continue
+        for keyword in call.keywords if call else []:
+            if keyword.arg == "name":
+                value = keyword.value
+                is_literal = isinstance(value, ast.Constant) and isinstance(value.value, str)
+                return value.value if is_literal else ""
+        return f"{module_name}.{fn.name}"
+    return None
+
+
 def _self_return_chains(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[list[str]] | None:
     """Имена методов в цепочках `return self.….…()`; None — если какой-то return не от self."""
     returns = [node for node in walk_local(fn) if isinstance(node, ast.Return)]
@@ -161,6 +181,15 @@ class ConstantInfo:
 
 
 @dataclass
+class TaskInfo:
+    """Функция-таска Celery уровня модуля."""
+
+    qn: str
+    name: str
+    module: str
+
+
+@dataclass
 class ModuleInfo:
     name: str
     path: Path
@@ -170,6 +199,7 @@ class ModuleInfo:
     stars: list[str] = field(default_factory=list)
     classes: dict[str, ClassInfo] = field(default_factory=dict)
     constants: dict[str, ConstantInfo] = field(default_factory=dict)
+    tasks: dict[str, TaskInfo] = field(default_factory=dict)
 
 
 class Index:
@@ -178,6 +208,8 @@ class Index:
     ):
         self.modules: dict[str, ModuleInfo] = {}
         self.by_dotted: dict[str, ClassInfo] = {}
+        # таски по имени, под которым их регистрирует Celery: так на них ссылается расписание beat
+        self.tasks_by_name: dict[str, TaskInfo] = {}
         self.errors: list[str] = []
         self._mro_cache: dict[str, list[ClassInfo | str] | None] = {}
         self._managers_cache: dict[str, dict[str, ClassInfo]] = {}
@@ -260,6 +292,13 @@ class Index:
                     module.constants[name] = ConstantInfo(
                         f"{path}::{name}", name, module.name, node
                     )
+            elif is_project and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                task_name = _task_name(node, module.name)
+                if task_name is not None:
+                    task = TaskInfo(f"{path}::{node.name}", node.name, module.name)
+                    module.tasks[node.name] = task
+                    if task_name:
+                        self.tasks_by_name[task_name] = task
         self.modules[module.name] = module
 
     def _collect_imports(self, module: ModuleInfo, is_pkg: bool) -> None:
@@ -419,10 +458,12 @@ class Index:
 
     # --- разрешение имён ------------------------------------------------------------------------
 
-    def resolve_dotted(self, dotted: str, depth: int = 0) -> ClassInfo | ConstantInfo | str | None:
+    def resolve_dotted(
+        self, dotted: str, depth: int = 0
+    ) -> ClassInfo | ConstantInfo | TaskInfo | str | None:
         """
-        Класс или константа проекта либо библиотеки; строка — внешнее имя (Django, stdlib); None
-        — не разрешилось.
+        Класс или константа проекта либо библиотеки, таска проекта; строка — внешнее имя (Django,
+        stdlib); None — не разрешилось.
         """
         if dotted in self.by_dotted:
             return self.by_dotted[dotted]
@@ -437,17 +478,19 @@ class Index:
             return None if head in self.roots or self._is_lib(head) else dotted
         if name in module.constants:
             return module.constants[name]
+        if name in module.tasks:
+            return module.tasks[name]
         if name in module.imports:
             return self.resolve_dotted(module.imports[name], depth + 1)
         for star in module.stars:
             found = self.resolve_dotted(f"{star}.{name}", depth + 1)
-            if isinstance(found, (ClassInfo, ConstantInfo)):
+            if isinstance(found, (ClassInfo, ConstantInfo, TaskInfo)):
                 return found
         return None
 
     def resolve_expr(
         self, module: ModuleInfo, expr: ast.expr | None
-    ) -> ClassInfo | ConstantInfo | str | None:
+    ) -> ClassInfo | ConstantInfo | TaskInfo | str | None:
         if expr is None:
             return None
         if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
@@ -470,7 +513,7 @@ class Index:
         if dotted is None:
             return None
         head, _, rest = dotted.partition(".")
-        if head in module.classes or head in module.constants:
+        if head in module.classes or head in module.constants or head in module.tasks:
             target = f"{module.name}.{head}"
         elif head in module.imports:
             target = module.imports[head]

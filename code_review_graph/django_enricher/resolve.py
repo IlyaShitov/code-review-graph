@@ -16,6 +16,7 @@ from .index import (
     ConstantInfo,
     Index,
     ModuleInfo,
+    TaskInfo,
     walk_local,
 )
 
@@ -23,8 +24,12 @@ RULE_CHAIN: Final[str] = "queryset_chain"
 RULE_MRO: Final[str] = "mro"
 RULE_PERMISSION: Final[str] = "permission_filter"
 RULE_CONSTANT: Final[str] = "constant_ref"
+RULE_TASK: Final[str] = "celery_task"
+RULE_BEAT: Final[str] = "celery_beat"
 # правила, по которым рёбра вставляются заново, а не переписываются из голых рёбер графа
-INSERTED_RULES: Final[frozenset[str]] = frozenset({RULE_PERMISSION, RULE_CONSTANT})
+INSERTED_RULES: Final[frozenset[str]] = frozenset({RULE_PERMISSION, RULE_CONSTANT, RULE_BEAT})
+# методы таски Celery, которые её запускают или собирают из неё сигнатуру для запуска
+TASK_CALLS: Final[frozenset[str]] = frozenset({"delay", "apply_async", "s", "si", "signature"})
 
 
 @dataclass(frozen=True)
@@ -95,6 +100,28 @@ def constant_refs(
                     str(module.path), node.lineno, target.name, target.qn, RULE_CONSTANT, scope
                 )
             )
+    return out
+
+
+def beat_refs(index: Index, module: ModuleInfo) -> list[Resolved]:
+    """Таски в записях расписания beat: `{'task': 'apps.x.tasks.name', ...}` — по имени таски."""
+    out = []
+    for node in ast.walk(module.tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values):
+            if not (
+                isinstance(key, ast.Constant)
+                and key.value == "task"
+                and isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+            ):
+                continue
+            task = index.tasks_by_name.get(value.value)
+            if task is not None:
+                out.append(
+                    Resolved(str(module.path), value.lineno, task.name, task.qn, RULE_BEAT, "")
+                )
     return out
 
 
@@ -253,12 +280,17 @@ class FunctionResolver:
     def run(self) -> list[Resolved]:
         out: list[Resolved] = []
         for node in walk_local(self.fn):
+            if isinstance(node, ast.Lambda):
+                out.extend(self._lambda_task_edges(node))
+                continue
             if not isinstance(node, ast.Call):
                 continue
             if isinstance(node.func, ast.Attribute):
                 receiver = self.infer(node.func.value)
                 if isinstance(receiver, Instance):
                     out.extend(self._method_edge(node, receiver))
+                elif node.func.attr in TASK_CALLS:
+                    out.extend(self._task_edge(node))
             out.extend(self._permission_edges(node))
         out.extend(constant_refs(self.index, self.module, self.fn, self.local_names, self.scope))
         return out
@@ -275,6 +307,37 @@ class FunctionResolver:
         return [
             Resolved(
                 str(self.module.path), call.lineno, name, f"{found[0].qn}.{name}", rule, self.scope
+            )
+        ]
+
+    def _lambda_task_edges(self, lam: ast.Lambda) -> list[Resolved]:
+        """`transaction.on_commit(lambda: task.delay(...))`: параметры лямбды затеняют имена."""
+        lambda_params = frozenset(arg.arg for arg in ast.walk(lam.args) if isinstance(arg, ast.arg))
+        return [
+            edge
+            for node in walk_local(lam)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in TASK_CALLS
+            for edge in self._task_edge(node, lambda_params)
+        ]
+
+    def _task_edge(
+        self, call: ast.Call, lambda_params: frozenset[str] = frozenset()
+    ) -> list[Resolved]:
+        """`task.delay(...)`, `tasks.task.apply_async(...)`: вызов самой таски."""
+        receiver = call.func.value
+        head = receiver
+        while isinstance(head, ast.Attribute):
+            head = head.value
+        if isinstance(head, ast.Name) and (head.id in self.local_names or head.id in lambda_params):
+            return []
+        task = self.index.resolve_expr(self.module, receiver)
+        if not isinstance(task, TaskInfo):
+            return []
+        return [
+            Resolved(
+                str(self.module.path), call.lineno, call.func.attr, task.qn, RULE_TASK, self.scope
             )
         ]
 
@@ -376,6 +439,7 @@ def resolve_project(index: Index) -> tuple[list[Resolved], Counter]:
         # уровень модуля: глобальные имена не затеняются, константы своего модуля разрешаются
         # напрямую
         module_results = constant_refs(index, module, module.tree, set(), "")
+        module_results.extend(beat_refs(index, module))
         for node, owner, scope in iter_scopes(module):
             if isinstance(node, ast.ClassDef):
                 # атрибуты класса затеняют одноимённые константы модуля в теле класса

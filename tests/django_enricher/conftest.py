@@ -153,6 +153,63 @@ def workspace(tmp_path_factory: pytest.TempPathFactory) -> Path:
             cheap_item = item.extend(title='Дешёвый')
             item_titles = list()
         """,
+        "proj/apps/shop/tasks.py": """
+            from celery import Celery, shared_task
+
+            app = Celery('shop')
+
+
+            @app.task
+            def sync_items():
+                pass
+
+
+            @app.task(name='shop.renamed')
+            def renamed_task():
+                pass
+
+
+            @shared_task
+            def cleanup():
+                pass
+
+
+            @app.task(name=Celery.main)
+            def computed_name_task():
+                pass
+
+
+            def plain():
+                pass
+        """,
+        "proj/apps/shop/task_usage.py": """
+            from django.db import transaction
+
+            from apps.shop import tasks
+            from apps.shop.tasks import cleanup, computed_name_task, plain, sync_items
+
+
+            def run_tasks():
+                sync_items.delay()
+                tasks.renamed_task.apply_async(countdown=1)
+                transaction.on_commit(lambda: cleanup.delay())
+                computed_name_task.s()
+                plain.delay()
+
+
+            def shadowed(sync_items):
+                sync_items.delay()
+                transaction.on_commit(lambda cleanup: cleanup.delay())
+        """,
+        "proj/apps/shop/schedule.py": """
+            beat_schedule = {
+                'sync': {'task': 'apps.shop.tasks.sync_items', 'schedule': 60},
+                'renamed': {'task': 'shop.renamed', 'schedule': 60},
+                'renamed_by_path': {'task': 'apps.shop.tasks.renamed_task', 'schedule': 60},
+                'computed': {'task': 'apps.shop.tasks.computed_name_task', 'schedule': 60},
+                'external': {'task': 'lib.tasks.external', 'schedule': 60},
+            }
+        """,
         "proj/apps/shop/recipes_usage.py": """
             from apps.shop import baker_recipes as shop_recipes
             from apps.shop.baker_recipes import item

@@ -191,3 +191,36 @@ def test_recipe_reference_has_one_edge_from_recipe_after_reparse(django_repo, mo
         result = incremental_update(django_repo, store, changed_files=["base_recipes.py"])
         _run_postprocess(store, result, "minimal", changed_files=["base_recipes.py"])
         assert [row[0] for row in store._conn.execute(edges_query, (target,))] == [derived]
+
+
+def test_celery_task_calls_and_beat_reach_the_task(django_repo, monkeypatch):
+    """
+    `.delay` из метода становится вызовом таски, запись beat — ссылкой на неё от константы
+    расписания.
+    """
+    (django_repo / "tasks.py").write_text(
+        "from celery import shared_task\n\n\n@shared_task\ndef sync():\n    pass\n"
+    )
+    (django_repo / "usage.py").write_text(
+        "from tasks import sync\n\n\nclass Sync:\n    def run(self):\n        sync.delay()\n"
+    )
+    (django_repo / "settings.py").write_text(
+        "CELERY_BEAT_SCHEDULE = {\n    'sync': {'task': 'tasks.sync', 'schedule': 60},\n}\n"
+    )
+    monkeypatch.setattr(
+        "code_review_graph.incremental.get_all_tracked_files",
+        lambda *args, **kwargs: ["manage.py", "tasks.py", "usage.py", "settings.py"],
+    )
+    with GraphStore(django_repo / "custom.db") as store:
+        result = full_build(django_repo, store)
+        _run_postprocess(store, result, "minimal", full_rebuild=True)
+        edges = store._conn.execute(
+            "SELECT kind, source_qualified, line FROM edges WHERE target_qualified = ? "
+            "AND kind IN ('CALLS', 'REFERENCES') ORDER BY kind",
+            (f"{django_repo}/tasks.py::sync",),
+        ).fetchall()
+
+    assert [tuple(edge) for edge in edges] == [
+        ("CALLS", f"{django_repo}/usage.py::Sync.run", 6),
+        ("REFERENCES", f"{django_repo}/settings.py::CELERY_BEAT_SCHEDULE", 2),
+    ]
