@@ -73,7 +73,7 @@ def enrich_django(store: GraphStore, repo: Path) -> dict | None:
     return {
         "source_root": str(source_root),
         "site_packages": str(site_packages or ""),
-        "libs": sorted(
+        "lib_count": len(
             {
                 module.name.split(".")[0]
                 for module in index.modules.values()

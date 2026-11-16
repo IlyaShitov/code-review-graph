@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 _PARTIAL_GRAPH_MIN_FILES = 8
 _PARTIAL_GRAPH_MAX_COVERAGE = 0.25
 _PARTIAL_GRAPH_SUSPECT_TRACKED_COVERAGE = 0.50
+# Changed and dependent files a build response lists; a branch switch changes
+# hundreds, and the full lists are for post-processing, not for the caller.
+_MAX_BUILD_RESPONSE_FILES = 20
 
 
 def _should_rebuild_partial_graph(
@@ -667,6 +670,7 @@ def build_or_update_graph(
                     store.set_metadata(BUILD_STATE_KEY, previous_state or "")
                     noop_result = {
                         **result,
+                        **_bounded_file_lists(result),
                         "status": "ok",
                         "build_type": "incremental",
                         "base_resolved": base_resolved,
@@ -694,6 +698,7 @@ def build_or_update_graph(
                 postprocess_level = postprocess if pending else "minimal"
                 build_result = {
                     **result,
+                    **_bounded_file_lists(result),
                     "status": "ok",
                     "build_type": "incremental",
                     "base_resolved": base_resolved,
@@ -733,9 +738,9 @@ def build_or_update_graph(
             summary = (
                 f"Incremental update: {result['files_updated']} files re-parsed, "
                 f"{result['total_nodes']} nodes and "
-                f"{result['total_edges']} edges updated. "
-                f"Changed: {result['changed_files']}. "
-                f"Dependents also updated: {result['dependent_files']}."
+                f"{result['total_edges']} edges updated; "
+                f"{len(result['changed_files'])} changed files, "
+                f"{len(result['dependent_files'])} dependents."
             )
             if failed:
                 summary += (
@@ -744,6 +749,7 @@ def build_or_update_graph(
                 )
             build_result = {
                 **result,
+                **_bounded_file_lists(result),
                 "status": "partial" if failed else "ok",
                 "build_type": "incremental",
                 "base_resolved": base_resolved,
@@ -816,6 +822,20 @@ def build_or_update_graph(
                 store.close()
         finally:
             lock.release()
+
+
+def _bounded_file_lists(result: dict[str, Any]) -> dict[str, Any]:
+    """The incremental result's file lists cut for the response, with their counts."""
+    changed = result.get("changed_files") or []
+    dependents = result.get("dependent_files") or []
+    return {
+        "changed_files": changed[:_MAX_BUILD_RESPONSE_FILES],
+        "changed_file_count": len(changed),
+        "changed_files_omitted": max(len(changed) - _MAX_BUILD_RESPONSE_FILES, 0),
+        "dependent_files": dependents[:_MAX_BUILD_RESPONSE_FILES],
+        "dependent_file_count": len(dependents),
+        "dependent_files_omitted": max(len(dependents) - _MAX_BUILD_RESPONSE_FILES, 0),
+    }
 
 
 def _lock_or_skip(

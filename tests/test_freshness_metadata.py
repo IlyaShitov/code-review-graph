@@ -416,3 +416,24 @@ def test_build_stopped_in_language_resolvers_is_rebuilt(repo, monkeypatch):
     )
     assert repaired["build_type"] == "full"
     assert repaired["repaired_interrupted_build"] is True
+
+
+def test_update_response_bounds_the_changed_file_list(repo):
+    """A branch switch changes hundreds of files: the response lists 20 and counts the rest."""
+    build_or_update_graph(full_rebuild=True, repo_root=str(repo), postprocess="none")
+    names = [f"mod_{index:02d}.py" for index in range(25)]
+    for name in names:
+        (repo / name).write_text(f"def {name[:-3]}():\n    return 0\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "add modules")
+
+    result = build_or_update_graph(full_rebuild=False, repo_root=str(repo), postprocess="none")
+
+    assert result["changed_files"] == names[:20]
+    assert (result["changed_file_count"], result["changed_files_omitted"]) == (25, 5)
+    assert (result["dependent_file_count"], result["dependent_files_omitted"]) == (0, 0)
+    assert result["summary"] == (
+        "Incremental update: 25 files re-parsed, "
+        f"{result['total_nodes']} nodes and {result['total_edges']} edges updated; "
+        "25 changed files, 0 dependents."
+    )
