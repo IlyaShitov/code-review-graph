@@ -1266,7 +1266,18 @@ def query_graph(
                         ),
                     }
 
-        if not node and pattern not in ("consumers_of", "file_summary"):
+        # A library base class has no node, yet each `class A(Base)` wrote an
+        # INHERITS edge to the name as written: answer inheritors_of from those.
+        has_external_base = (
+            pattern == "inheritors_of"
+            and not node
+            and next(store.iter_edges_by_base_name(target), None) is not None
+        )
+        if (
+            not node
+            and not has_external_base
+            and pattern not in ("consumers_of", "file_summary")
+        ):
             # This branch, not the empty-result path below, is where an
             # unresolved target actually lands for most patterns, so the
             # not-indexed marker has to be attached here too.
@@ -1586,6 +1597,12 @@ def query_graph(
                     add_result(result)
                     seen.add(t.qualified_name)
 
+        elif pattern == "inheritors_of" and has_external_base:
+            for e in store.iter_edges_by_base_name(target):
+                child = store.get_node(e.source_qualified)
+                if child:
+                    add_result(node_to_dict(child) | {"inferred_by": "external_base"}, e)
+
         elif pattern == "inheritors_of":
             for e in store.iter_edges_by_target(qn):
                 if e.kind in ("INHERITS", "IMPLEMENTS"):
@@ -1755,6 +1772,11 @@ def query_graph(
             confidence = empty_query_confidence(store, root, pattern, target, node)
         elif resolution == RESOLUTION_ALL:
             confidence = guessed_calls_confidence(resolution_split)
+        if has_external_base:
+            confidence = (
+                "the base class is not indexed (a library class): inheritors are "
+                "matched by its name as written in their class statements"
+            )
 
         if detail_level == "minimal":
             result_fields: tuple[str, ...] = (

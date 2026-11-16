@@ -1113,6 +1113,45 @@ class TestQueryGraphCallTargetFallbacks:
                 assert len(result["edges"]) == 1
                 assert result["edges"][0]["source"] == result["results"][0]["qualified_name"]
 
+    def test_inheritors_of_library_base_answers_from_inherits_edges(self):
+        """A base no node stands for is answered from the edges naming it.
+
+        Bare and module-qualified spellings match; ``_`` is not a wildcard and
+        a name bound to a node path is not a library base.
+        """
+        child_file = (self.root / "use_cases.py").as_posix()
+        bases = {
+            "Bare": "Abstract_Base",
+            "Qualified": "core.Abstract_Base",
+            "Lookalike": "core.AbstractXBase",
+            "Bound": f"{child_file}::Outer.Abstract_Base",
+        }
+        with GraphStore(self.db_path) as store:
+            for index, (name, base) in enumerate(bases.items(), start=1):
+                store.upsert_node(NodeInfo(
+                    kind="Class", name=name, file_path=child_file,
+                    language="python", line_start=index, line_end=index,
+                ))
+                store.upsert_edge(EdgeInfo(
+                    kind="INHERITS", source=f"{child_file}::{name}", target=base,
+                    file_path=child_file, line=index,
+                ))
+            store.commit()
+
+        result = query_graph("inheritors_of", "Abstract_Base", str(self.root))
+        first_page = query_graph(
+            "inheritors_of", "Abstract_Base", str(self.root), max_results=1,
+        )
+        missing = query_graph("inheritors_of", "MissingBase", str(self.root))
+
+        assert result["status"] == "ok"
+        assert {item["name"]: item["inferred_by"] for item in result["results"]} == {
+            "Bare": "external_base", "Qualified": "external_base",
+        }
+        assert "library class" in result["confidence"]
+        assert (first_page["result_count"], len(first_page["results"])) == (2, 1)
+        assert missing["status"] == "not_found"
+
     @pytest.mark.parametrize("resolved", [False, True])
     def test_inheritors_of_preserves_exact_and_single_declaration_matches(
         self, tmp_path, monkeypatch, resolved,

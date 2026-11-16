@@ -2313,6 +2313,23 @@ class GraphStore:
         for row in rows:
             yield self._row_to_edge(row)
 
+    def iter_edges_by_base_name(self, name: str) -> Iterator[GraphEdge]:
+        """Yield INHERITS/IMPLEMENTS edges whose base is written as *name*.
+
+        For a base no node stands for (a library class): ``class A(Base)``
+        writes ``Base`` and ``class B(module.Base)`` writes ``module.Base``,
+        so both match. Edges bound to a node (``file::Name``) do not.
+        """
+        escaped = name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        rows = self._conn.execute(
+            "SELECT * FROM edges WHERE kind IN ('INHERITS', 'IMPLEMENTS') "
+            "AND (target_qualified = ? OR (target_qualified LIKE ? ESCAPE '\\' "
+            "AND instr(target_qualified, '::') = 0))",
+            (name, f"%.{escaped}"),
+        )
+        for row in rows:
+            yield self._row_to_edge(row)
+
     def get_transitive_tests(
         self,
         qualified_name: str,
