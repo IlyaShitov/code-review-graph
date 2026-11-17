@@ -1720,10 +1720,15 @@ def query_graph(
                     edges_out.append(edge_to_dict(edge))
 
         elif pattern == "file_summary":
-            graph_paths = _resolve_graph_file_paths(store, root, [target])
-            for graph_path in graph_paths:
-                for n in store.iter_nodes_by_file(graph_path):
+            directory = root / target
+            if directory.is_dir():
+                # A directory has no nodes of its own: list the files below it.
+                for n in store.iter_file_nodes_under(str(directory)):
                     add_result(node_to_dict(n))
+            else:
+                for graph_path in _resolve_graph_file_paths(store, root, [target]):
+                    for n in store.iter_nodes_by_file(graph_path):
+                        add_result(node_to_dict(n))
 
         resolution_split: dict[str, int] | None = None
         distinct_nodes = 0

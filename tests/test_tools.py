@@ -1277,6 +1277,28 @@ class TestGraphPathResolution:
 
         assert any(n["name"] == "handle" for n in result["results"])
 
+    def test_file_summary_on_a_directory_lists_the_files_below_it(self, tmp_path):
+        repo = tmp_path.resolve()
+        (repo / ".git").mkdir()
+        (repo / "src" / "sub").mkdir(parents=True)
+        (repo / ".code-review-graph").mkdir()
+        with GraphStore(repo / ".code-review-graph" / "graph.db") as store:
+            for rel in ("src/sub/jobs.py", "src/app.py", "src_extra.py"):
+                path = str(repo / rel)
+                for kind, name in (("File", path), ("Function", "handle")):
+                    store.upsert_node(NodeInfo(
+                        kind=kind, name=name, file_path=path,
+                        line_start=1, line_end=3, language="python",
+                    ))
+            store.commit()
+
+        result = query_graph(pattern="file_summary", target="src", repo_root=str(repo))
+
+        assert [(n["kind"], n["file_path"]) for n in result["results"]] == [
+            ("File", str(repo / "src/app.py")),
+            ("File", str(repo / "src/sub/jobs.py")),
+        ]
+
 
 class TestRepoRootValidation:
     def test_validate_repo_root_accepts_svn_working_copy(self, tmp_path):

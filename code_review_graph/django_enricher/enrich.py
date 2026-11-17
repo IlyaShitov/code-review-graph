@@ -47,6 +47,19 @@ def project_files(con: sqlite3.Connection, source_root: Path) -> list[Path]:
     ]
 
 
+def is_enriched(store: GraphStore) -> bool:
+    """
+    Есть ли в графе рёбра резолвера. Граф, собранный upstream, их не содержит — его нужно
+    обогатить и при сборке без изменений.
+    """
+    return (
+        store._conn.execute(
+            "select 1 from edges where json_extract(extra, '$.resolver') = 'django' limit 1"
+        ).fetchone()
+        is not None
+    )
+
+
 def enrich_django(store: GraphStore, repo: Path) -> dict | None:
     """Enrich the current build using its connection and repository write lock.
 

@@ -2178,6 +2178,17 @@ class GraphStore:
         for row in rows:
             yield self._row_to_node(row)
 
+    def iter_file_nodes_under(self, directory: str) -> Iterator[GraphNode]:
+        """Yield the File nodes below *directory*, at any depth, by path."""
+        prefix = normalize_file_path(directory).rstrip("/") + "/"
+        rows = self._conn.execute(
+            "SELECT * FROM nodes WHERE kind = 'File' AND substr(file_path, 1, ?) = ? "
+            "ORDER BY file_path",
+            (len(prefix), prefix),
+        )
+        for row in rows:
+            yield self._row_to_node(row)
+
     def get_all_nodes(self, exclude_files: bool = True) -> list[GraphNode]:
         """Return all nodes, optionally excluding File nodes."""
         if exclude_files:
@@ -6016,6 +6027,10 @@ def edge_to_dict(e: GraphEdge) -> dict:
     # edge to say "as expected".
     if e.target_resolution == RESOLUTION_UNRESOLVED:
         result["target_resolution"] = RESOLUTION_UNRESOLVED
+    # How a resolver (Django, pytest fixtures) inferred the edge.
+    rule = e.extra.get("rule")
+    if isinstance(rule, str) and rule:
+        result["rule"] = _sanitize_name(rule)
     for key in ("ambiguous_targets", "unresolved_targets"):
         targets = e.extra.get(key)
         if isinstance(targets, list):

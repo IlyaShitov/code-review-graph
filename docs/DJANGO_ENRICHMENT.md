@@ -6,7 +6,11 @@ The resolver from `django-graph-enricher` is bundled in
 
 Full builds and incremental updates run it automatically when `manage.py`
 exists at the repository root or up to two directories below it. This includes
-MCP, CLI and watcher builds, including updates without changed files.
+MCP, CLI and watcher builds. An update that changes nothing in the graph skips
+enrichment when the graph already has it; a graph built without it (by the
+upstream version) is enriched by such an update too. Library code in `.venv` is
+not tracked, so after upgrading a library run a full rebuild to re-resolve
+calls through it.
 No external hook, Docker container, Django installation or additional dependency
 is needed. Project code is parsed statically and never imported or executed.
 
@@ -19,7 +23,12 @@ Enrichment uses the build's SQLite connection and write lock, including custom
 database locations. Its changes are atomic; a write failure aborts the build
 instead of silently reporting an enriched graph. The result contains
 `django_enrichment` with resolution/injection counts and unreadable source files.
-For non-Django repositories the value is `null`.
+For non-Django repositories, and when enrichment was skipped, the value is `null`.
+
+Edges the resolver adds or rebinds carry a `rule` (`queryset_chain`, `mro`,
+`permission_filter`, `constant_ref`, `celery_task`, `celery_beat`). Query
+responses include it in each edge, and the compact format shows it in place of
+the confidence tier.
 
 Normal postprocessing runs afterwards, so FTS sees the added constants and
 labels. With full postprocessing, flows and communities are recomputed across

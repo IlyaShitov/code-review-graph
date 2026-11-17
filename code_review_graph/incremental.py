@@ -36,7 +36,7 @@ from .constants import (
     read_only_requested,
 )
 from .csharp_resolver import restore_csharp_references
-from .django_enricher.enrich import enrich_django
+from .django_enricher.enrich import enrich_django, is_enriched
 from .pytest_fixtures import link_pytest_fixtures
 from .errors import ChangeDiscoveryError, GraphRootMismatchError, GraphStoreError
 from .graph import GraphStore
@@ -3360,7 +3360,7 @@ def incremental_update(
             "communities_were_affected": False,
             "errors": [],
             "freshness_advanced": False,
-            "django_enrichment": enrich_django(store, repo_root),
+            "django_enrichment": None if is_enriched(store) else enrich_django(store, repo_root),
             "pytest_fixtures": link_pytest_fixtures(store, repo_root),
         }
 
@@ -3663,7 +3663,13 @@ def incremental_update(
         _relink_stored_edges(store, repo_root, followed_dirs)
     if has_graph_changes or scoped_changed:
         _refresh_target_resolution(store)
-    django_stats = enrich_django(store, repo_root)
+    # Without graph changes the enrichment would rewrite the same edges, and
+    # its non-empty stats would also cost the build a postprocess pass.
+    django_stats = (
+        enrich_django(store, repo_root)
+        if has_graph_changes or not is_enriched(store)
+        else None
+    )
     pytest_stats = link_pytest_fixtures(store, repo_root)
 
     # Freshness follows what was stored. A file that failed to parse is

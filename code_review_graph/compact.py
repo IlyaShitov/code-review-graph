@@ -13,6 +13,7 @@ _NODE_FIELDS = {
 }
 _EDGE_FIELDS = {
     "id", "source", "target", "kind", "file_path", "line", "confidence_tier", "confidence",
+    "rule",
 }
 
 
@@ -24,11 +25,16 @@ def _value(value: Any) -> str:
 
 def _edge_details(edge: dict[str, Any]) -> list[str]:
     details = []
-    tier = edge.get("confidence_tier")
-    if tier and tier != "EXTRACTED":
-        details.append(str(tier))
-    if edge.get("confidence", 1) < 1:
-        details.append(f"confidence: {edge['confidence']}")
+    if edge.get("rule"):
+        # The rule says how a resolver inferred the edge; its tier and
+        # confidence are the same for every edge of that rule.
+        details.append(str(edge["rule"]))
+    else:
+        tier = edge.get("confidence_tier")
+        if tier and tier != "EXTRACTED":
+            details.append(str(tier))
+        if edge.get("confidence", 1) < 1:
+            details.append(f"confidence: {edge['confidence']}")
     details.extend(f"{key}: {_value(value)}" for key, value in edge.items()
                    if key not in _EDGE_FIELDS)
     return details
@@ -41,9 +47,10 @@ def _node_lines(
     qualified = (
         node.get("qualified_name") or node.get("import_target") or node.get("importer", "")
     )
-    symbol = qualified.partition("::")[2] or ".".join(
+    # A file's name is its path, which the label already shows.
+    symbol = "" if node.get("kind") == "File" else (qualified.partition("::")[2] or ".".join(
         str(node[key]) for key in ("parent_name", "name") if node.get(key)
-    )
+    ))
     path = node.get("file_path") or node.get("file") or qualified.partition("::")[0]
     identity = qualified or f"{path}  {symbol}".strip()
     location = str(node.get("kind", ""))
@@ -55,7 +62,7 @@ def _node_lines(
     site = node.get("call_site")
     if site and not full_name:
         site_path = site.get("file", path)
-        label = f"{site_path.removeprefix(prefix)}:{site['line']}  {symbol}"
+        label = f"{site_path.removeprefix(prefix)}:{site['line']}  {symbol}".rstrip()
         if site_path != path and node.get("file_path"):
             label += f" [definition: {identity.removeprefix(prefix)}]"
     else:

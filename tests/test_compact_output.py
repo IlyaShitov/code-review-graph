@@ -168,6 +168,24 @@ def test_callee_edge_confidence_and_inferred_tests_are_preserved(query_response)
     assert "INFERRED" in text and "name_match" in text and "indirect" in text
 
 
+def test_file_caller_and_resolver_rule_are_spelled_out(query_response):
+    """A file caller is named by its call site; a resolver rule replaces the tier."""
+    from code_review_graph.compact import format_compact
+
+    response = copy.deepcopy(query_response)
+    path = "/repo/pkg/urls.py"
+    response["results"][0] = {
+        "name": path, "kind": "File", "qualified_name": path, "file_path": path,
+        "line_start": 1, "line_end": 30, "call_site": {"line": 8},
+    }
+    response["edges"][0] |= {
+        "source": path, "file_path": path, "confidence_tier": "INFERRED", "confidence": 0.8,
+        "rule": "constant_ref",
+    }
+    lines = format_compact(response, "/repo").splitlines()
+    assert "pkg/urls.py:8  (File 1-30, CALLS, constant_ref)" in lines
+
+
 def test_formatter_does_not_mutate_response(query_response):
     from code_review_graph.compact import format_compact
 

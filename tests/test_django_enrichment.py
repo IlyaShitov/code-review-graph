@@ -7,6 +7,7 @@ import pytest
 from code_review_graph.graph import GraphStore
 from code_review_graph.incremental import full_build, incremental_update
 from code_review_graph.tools.build import _run_postprocess, build_or_update_graph
+from code_review_graph.tools.query import query_graph
 
 
 @pytest.fixture
@@ -127,6 +128,31 @@ def test_noop_update_enriches_existing_graph(django_repo, monkeypatch):
         assert store._conn.execute(
             "SELECT community_id FROM nodes WHERE kind = 'Constant'"
         ).fetchone()[0] is not None
+
+
+@pytest.mark.parametrize("changed_files", [[], ["models.py"]])
+def test_update_without_graph_changes_keeps_the_enrichment(django_repo, changed_files):
+    """Граф обогащён и не менялся — резолвер не перезапускается, его рёбра остаются."""
+    with GraphStore(django_repo / "custom.db") as store:
+        full_build(django_repo, store)
+        edges_query = (
+            "SELECT count(*) FROM edges WHERE json_extract(extra, '$.resolver') = 'django'"
+        )
+        edges_before = store._conn.execute(edges_query).fetchone()[0]
+        assert edges_before > 0
+        result = incremental_update(django_repo, store, changed_files=changed_files)
+        assert result["files_updated"] == 0
+        assert result["django_enrichment"] is None
+        assert store._conn.execute(edges_query).fetchone()[0] == edges_before
+
+
+def test_callers_of_names_the_resolver_rule(django_repo):
+    (django_repo / ".git").mkdir()
+    build_or_update_graph(repo_root=str(django_repo), full_rebuild=True, postprocess="none")
+    result = query_graph(
+        pattern="callers_of", target="ItemQuerySet.active", repo_root=str(django_repo)
+    )
+    assert [edge["rule"] for edge in result["edges"]] == ["queryset_chain"]
 
 
 def test_enrichment_write_failure_rolls_back(django_repo, monkeypatch):
