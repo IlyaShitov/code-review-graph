@@ -10,6 +10,7 @@ from code_review_graph.graph import GraphStore
 from code_review_graph.incremental import full_build, incremental_update
 from code_review_graph.parser import EdgeInfo, NodeInfo
 from code_review_graph.postprocessing import run_post_processing
+from code_review_graph.tools.build import build_or_update_graph
 
 
 def _get_signature(store, qualified_name):
@@ -290,6 +291,29 @@ class TestToolBuildUsesSharedPipeline:
 
             assert len(unsigned_before_pp) > 0
             assert len(unsigned_after_pp) == 0
+        finally:
+            store.close()
+
+    def test_parsed_python_signature_has_one_pair_of_parentheses(self, tmp_path):
+        # The parser keeps the parentheses in ``params``; the signature must
+        # not add a second pair, whichever entry point computes it.
+        (tmp_path / "sample.py").write_text(
+            "class Service:\n    def handle(self, x: int) -> str:\n        return ''\n"
+        )
+        (tmp_path / ".git").mkdir()
+        mock_target = "code_review_graph.incremental.get_all_tracked_files"
+        with patch(mock_target, return_value=["sample.py"]):
+            build_or_update_graph(repo_root=str(tmp_path), full_rebuild=True)
+        store = GraphStore(tmp_path / ".code-review-graph" / "graph.db")
+        try:
+            assert _get_signature(store, f"{tmp_path}/sample.py::Service.handle") == (
+                "def handle(self, x: int) -> str"
+            )
+            store._conn.execute("UPDATE nodes SET signature = NULL")
+            run_post_processing(store)
+            assert _get_signature(store, f"{tmp_path}/sample.py::Service.handle") == (
+                "def handle(self, x: int) -> str"
+            )
         finally:
             store.close()
 

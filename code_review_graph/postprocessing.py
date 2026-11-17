@@ -103,6 +103,21 @@ def _resolve_bare_endpoints(
         )
 
 
+def node_signature(name: str, kind: str, params: str | None, return_type: str | None) -> str:
+    """Readable signature of a node, as search results and summaries show it."""
+    if kind in ("Function", "Test"):
+        # The parser stores the parameter list with its parentheses for most
+        # languages; adding another pair would read as ``def f((self, x))``.
+        params = params or "()"
+        if not params.startswith("("):
+            params = f"({params})"
+        signature = f"def {name}{params}"
+        return f"{signature} -> {return_type}" if return_type else signature
+    if kind == "Class":
+        return f"class {name}"
+    return name
+
+
 def _compute_signatures(
     store: GraphStore,
     result: dict[str, Any],
@@ -120,15 +135,7 @@ def _compute_signatures(
                 row[3],
                 row[4],
             )
-            if kind in ("Function", "Test"):
-                sig = f"def {name}({params or ''})"
-                if ret:
-                    sig += f" -> {ret}"
-            elif kind == "Class":
-                sig = f"class {name}"
-            else:
-                sig = name
-            signature_rows.append((sig[:512], node_id))
+            signature_rows.append((node_signature(name, kind, params, ret)[:512], node_id))
         # Single transaction via executemany instead of one autocommitted
         # UPDATE per node (issue #721).
         store.update_node_signatures(signature_rows)

@@ -35,6 +35,10 @@
 
 ### Fixed
 
+- Function signatures no longer show doubled parentheses, as in
+  `def f((self, x)) -> T`: the parser keeps the parentheses in the parameter
+  list, and the signature added another pair. Signatures are computed once,
+  so an existing graph keeps the old ones until a full rebuild.
 - The MCP entry and every hook `install` writes now run the copy of
   code-review-graph that ran `install`. The MCP entry used `uvx` whenever it
   was on PATH, and hooks ran the first copy on PATH, so an older copy could
