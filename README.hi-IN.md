@@ -594,10 +594,10 @@ alias = "project-b"
 </details>
 
 <details>
-<summary><strong>30 MCP टूल</strong></summary>
+<summary><strong>31 MCP टूल</strong></summary>
 <br>
 
-ग्राफ़ बन जाने के बाद असिस्टेंट इनका उपयोग करता है। जो 25 टूल सिर्फ़ पढ़ते हैं, उन पर `readOnlyHint: true` लगा है, इसलिए क्लाइंट उन्हें बिना पूछे चला सकता है; लिखने वाले पाँच टूल (`build_or_update_graph_tool`, `run_postprocess_tool`, `embed_graph_tool`, `apply_refactor_tool`, `generate_wiki_tool`) पर यह नहीं लगा।
+ग्राफ़ बन जाने के बाद असिस्टेंट इनका उपयोग करता है। जो 26 टूल सिर्फ़ पढ़ते हैं, उन पर `readOnlyHint: true` लगा है, इसलिए क्लाइंट उन्हें बिना पूछे चला सकता है; लिखने वाले पाँच टूल (`build_or_update_graph_tool`, `run_postprocess_tool`, `embed_graph_tool`, `apply_refactor_tool`, `generate_wiki_tool`) पर यह नहीं लगा।
 
 | टूल | विवरण |
 |------|-------------|
@@ -609,6 +609,7 @@ alias = "project-b"
 | `query_graph_tool` | कॉलर, कॉली, टेस्ट, इम्पोर्ट, इनहेरिटेंस, और दो सिंबल के बीच `path_to` |
 | `traverse_graph_tool` | किसी भी नोड से BFS/DFS ट्रैवर्सल, टोकन बजट के साथ |
 | `semantic_search_nodes_tool` | नाम या अर्थ से कोड इकाइयाँ खोजना |
+| `search_text_tool` | ट्रैक की गई फ़ाइलों में टेक्स्ट खोजना, हर मिलान के आसपास का फ़ंक्शन या क्लास बताना |
 | `embed_graph_tool` | सिमेंटिक खोज के लिए वेक्टर एम्बेडिंग बनाना |
 | `list_graph_stats_tool` | ग्राफ़ का आकार और स्वास्थ्य |
 | `get_docs_section_tool` | दस्तावेज़ के खंड लाना |
@@ -742,7 +743,7 @@ code-review-graph embed --provider voyage --model voyage-code-3
 
 #### टूल फ़िल्टरिंग
 
-CRG डिफ़ॉल्ट रूप से 30 MCP टूल दिखाता है। सर्वर को एक उपसमूह तक सीमित करने के लिए `--tools` या `CRG_TOOLS` पर्यावरण चर का उपयोग करें:
+CRG डिफ़ॉल्ट रूप से 31 MCP टूल दिखाता है। सर्वर को एक उपसमूह तक सीमित करने के लिए `--tools` या `CRG_TOOLS` पर्यावरण चर का उपयोग करें:
 
 ```bash
 # CLI flag

@@ -640,13 +640,33 @@ says there may be more.
 files. All snippets share one budget of 240 lines, or 700 with
 `expand_neighbors=True`, which adds up to four callers and callees for each of
 the top three hits. A cut snippet carries `source_truncated`. Source is not
-attached when `detail_level="minimal"`.
+attached when `detail_level="minimal"`. A hit with source also carries
+`constants`: up to eight constants it references, each with its value as
+`NAME = value` (cut at 200 characters), its file and its line. Constant nodes
+come from the Django enrichment, so other projects get none.
 
 `kind` is applied before the hits are cut. Test code ranks below production
 code unless the query asks about tests (`kind="Test"`, or a word such as
 "test", "spec", "fixture" or "mock"). JSON ranks below code unless you ask for
 it (`kind="JsonPath"`, a `$` path or a `.json` name). Liquid `Output` nodes are
 found only with `kind="Output"`.
+
+#### `search_text_tool`
+```
+query: str                   # Text to find, literally unless regex; 1-200 characters
+regex: bool = False          # Treat query as a Python regular expression
+case_sensitive: bool = False
+path: str = ""               # Glob on the repository-relative path; "*" also matches "/"
+limit: int = 50              # At most 200
+repo_root: str | None
+```
+The graph indexes symbols, not the text inside them. This reads every file Git
+tracks, including files the graph does not parse, and returns each matching
+line with the narrowest function, test, class or constant that spans it; a line
+outside them is reported against its file. Each row carries `line` and `text`
+(cut at 200 characters). `total` counts every matching line, `results_omitted`
+those not shown. Binary files, files over 1 MB and paths that resolve outside
+the repository are skipped.
 
 #### `embed_graph_tool`
 ```

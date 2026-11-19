@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import defaultdict, deque
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,7 @@ from ..hints import generate_hints, get_session
 from ..incremental import (
     discover_review_changes,
     followed_files,
+    get_all_tracked_files,
     get_db_path,
     path_within_repo,
 )
@@ -104,6 +106,18 @@ _MAX_SEARCH_SOURCE_LINES_PER_NODE = 60
 _MAX_EXPANDED_SOURCE_LINES = 700
 _MAX_EXPANDED_HITS = 3
 _MAX_NEIGHBORS_PER_HIT = 4
+
+# A constant's value usually sits in another file, so a hit whose answer is a
+# format string or a setting would still cost one more read without it.
+_MAX_CONSTANTS_PER_HIT = 8
+
+# Text search reads every tracked file, so it skips what cannot be source and
+# bounds what one reply can carry.
+_MAX_TEXT_QUERY_CHARS = 200
+_MAX_TEXT_FILE_BYTES = 1_000_000
+_MAX_TEXT_MATCHES = 200
+_MAX_TEXT_MATCH_CHARS = 200
+_TEXT_MATCH_NODE_KINDS = frozenset({"Function", "Test", "Class", "Constant"})
 
 # Lines alone do not bound a reply: one minified line can be megabytes.
 _MAX_SEARCH_SOURCE_CHARS = 80_000
@@ -2014,6 +2028,27 @@ def _attach_neighbors(
                 hit[key] = entries
 
 
+def _attach_constants(results: list[dict[str, Any]], store: GraphStore) -> None:
+    """Attach the constants each hit with source references, with their values."""
+    for hit in results:
+        if "source" not in hit:
+            continue
+        qname = _stored_qualified_name(store, hit)
+        if not qname:
+            continue
+        rows = store.get_referenced_constants(qname, _MAX_CONSTANTS_PER_HIT)
+        if rows:
+            hit["constants"] = [
+                {
+                    "name": _sanitize_name(row["name"]),
+                    "value": row["signature"],
+                    "file_path": row["file_path"],
+                    "line": row["line_start"],
+                }
+                for row in rows
+            ]
+
+
 def semantic_search_nodes(
     query: str,
     kind: str | None = None,
@@ -2114,6 +2149,7 @@ def semantic_search_nodes(
                     hit, hit.get("file_path"),
                     hit.get("line_start"), hit.get("line_end"),
                 )
+            _attach_constants(results, store)
             source_omitted = budget.omitted
 
         total_text = f"{total}+" if lower_bound else str(total)
@@ -2163,6 +2199,120 @@ def semantic_search_nodes(
         result["_hints"] = generate_hints(
             "semantic_search_nodes_tool", result, get_session()
         )
+        return result
+    finally:
+        store.close()
+
+
+def _text_match(
+    nodes: list[GraphNode], file_path: str, rel_path: str, line_number: int, line: str,
+) -> dict[str, Any]:
+    """One matched line, named after the narrowest node that spans it."""
+    spanning = [
+        node for node in nodes
+        if node.kind in _TEXT_MATCH_NODE_KINDS and node.line_start <= line_number <= node.line_end
+    ]
+    node = min(spanning, key=lambda node: node.line_end - node.line_start, default=None)
+    match: dict[str, Any] = (
+        _neighbor_entry(node) if node
+        else {"name": rel_path, "kind": "File", "file_path": file_path}
+    )
+    match["line"] = line_number
+    match["text"] = line.strip()[:_MAX_TEXT_MATCH_CHARS]
+    return match
+
+
+def search_text(
+    query: str,
+    regex: bool = False,
+    case_sensitive: bool = False,
+    path: str = "",
+    limit: int = 50,
+    repo_root: str | None = None,
+) -> dict[str, Any]:
+    """Find text in the tracked files and name the graph node around each match.
+
+    The graph indexes symbols, not the text inside them: string literals, log
+    messages, comments and config keys. This reads the files Git tracks,
+    including those the graph does not parse, and reports each matching line
+    with the narrowest function, test, class or constant that spans it.
+
+    Args:
+        query: Text to find, literally unless *regex* is set.
+        regex: Treat *query* as a Python regular expression.
+        case_sensitive: Match case. Default: ignore it.
+        path: Optional glob on the repository-relative path, such as
+            ``apps/*.py``. ``*`` also matches ``/``.
+        limit: Maximum lines to return (default: 50, at most 200).
+        repo_root: Repository root path. Auto-detected if omitted.
+
+    Returns:
+        Matching lines in path order. ``total`` counts every matching line,
+        ``results_omitted`` those not shown.
+    """
+    _validate_positive_int(limit, "limit")
+    if not query or len(query) > _MAX_TEXT_QUERY_CHARS:
+        return _error_response(f"query must be 1 to {_MAX_TEXT_QUERY_CHARS} characters")
+    try:
+        pattern = re.compile(
+            query if regex else re.escape(query), 0 if case_sensitive else re.IGNORECASE,
+        )
+    except re.error as exc:
+        return _error_response(f"Invalid regular expression {query!r}: {exc}")
+    shown_limit = min(limit, _MAX_TEXT_MATCHES)
+
+    store, root = _get_store(repo_root)
+    try:
+        followed = followed_files(store)
+        results: list[dict[str, Any]] = []
+        total = 0
+        for rel_path in get_all_tracked_files(root):
+            if path and not fnmatch(rel_path, path):
+                continue
+            file_path = root / rel_path
+            try:
+                if (
+                    not path_within_repo(root, file_path, followed)
+                    or file_path.stat().st_size > _MAX_TEXT_FILE_BYTES
+                ):
+                    continue
+                data = file_path.read_bytes()
+            except FileNotFoundError:
+                # Deleted in the working tree but still tracked.
+                continue
+            except OSError as exc:
+                logger.warning("Could not read %s for a text search: %s", file_path, exc)
+                continue
+            if b"\0" in data[:8192]:
+                continue
+            text = data.decode("utf-8", errors="replace")
+            if not pattern.search(text):
+                continue
+            nodes = store.get_nodes_by_file(str(file_path))
+            # Split on "\n" only: the graph numbers lines that way, and
+            # splitlines() also breaks on form feeds and Unicode separators,
+            # shifting every later line away from the node that spans it.
+            for line_number, raw_line in enumerate(text.split("\n"), 1):
+                line = raw_line.removesuffix("\r")
+                if not pattern.search(line):
+                    continue
+                total += 1
+                if len(results) < shown_limit:
+                    results.append(
+                        _text_match(nodes, str(file_path), rel_path, line_number, line)
+                    )
+
+        result: dict[str, Any] = {
+            "status": "ok",
+            "query": query,
+            "summary": f"Found {total} line(s) matching '{query}'"
+            + _shown_of(len(results), total),
+            "results": results,
+            "total": total,
+            "truncated": total > len(results),
+            "results_omitted": total - len(results),
+        }
+        result["_hints"] = generate_hints("search_text_tool", result, get_session())
         return result
     finally:
         store.close()

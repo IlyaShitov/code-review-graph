@@ -4,6 +4,18 @@
 
 ### Added
 
+- New `search_text_tool` finds text the graph does not index (string literals,
+  log messages, comments, config keys) in every file Git tracks, and names the
+  narrowest function, test, class or constant around each matching line. The
+  server instructions now point to it instead of Grep.
+- `semantic_search_nodes_tool` with `include_source=True` lists the constants
+  each hit with source references, with their values, so a format string or a
+  setting needs no extra read.
+- The Django enrichment resolves `settings.X` read through
+  `django.conf.settings` to the constant `X` of the `DJANGO_SETTINGS_MODULE`
+  that `manage.py` sets, so the setting has callers and its value shows up in
+  search.
+
 - `install` keeps a record of the files it writes inside the repository, in
   `.code-review-graph/install-manifest.json`, even when `--data-dir` or
   `CRG_DATA_DIR` keeps the graph somewhere else. Each install adds to it and
@@ -35,6 +47,9 @@
 
 ### Fixed
 
+- When a Django module takes the same name from several `import *` lines, the
+  enrichment now resolves it to the last one, as Python does, instead of the
+  first.
 - Function signatures no longer show doubled parentheses, as in
   `def f((self, x)) -> T`: the parser keeps the parentheses in the parameter
   list, and the signature added another pair. Signatures are computed once,

@@ -1,6 +1,7 @@
 """Обогащение графа code-review-graph Django-проекта: вызовы методов менеджеров и кверисетов, MRO,
 фильтры прав, константы и лейблы — прямо в `.code-review-graph/graph.db`."""
 
+import ast
 import sqlite3
 import time
 from pathlib import Path
@@ -23,6 +24,32 @@ def find_source_root(repo: Path) -> Path:
         if path.is_file() and not any(part.startswith(".") for part in path.relative_to(repo).parts)
     ]
     return min(candidates, key=lambda path: len(path.parts)).parent if candidates else repo
+
+
+def find_settings_module(source_root: Path) -> str:
+    """
+    Модуль настроек из `os.environ.setdefault('DJANGO_SETTINGS_MODULE', '...')` в `manage.py`;
+    не нашёлся — пустая строка.
+    """
+    try:
+        tree = ast.parse((source_root / "manage.py").read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+        return ""
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "setdefault"
+        ):
+            continue
+        values = [arg.value for arg in node.args if isinstance(arg, ast.Constant)]
+        if (
+            len(values) == 2
+            and values[0] == "DJANGO_SETTINGS_MODULE"
+            and isinstance(values[1], str)
+        ):
+            return values[1]
+    return ""
 
 
 def find_site_packages(repo: Path) -> Path | None:
@@ -72,7 +99,12 @@ def enrich_django(store: GraphStore, repo: Path) -> dict | None:
     started = time.monotonic()
     site_packages = find_site_packages(repo)
     con = store._conn
-    index = Index(source_root, project_files(con, source_root), site_packages)
+    index = Index(
+        source_root,
+        project_files(con, source_root),
+        site_packages,
+        settings_module=find_settings_module(source_root),
+    )
     results, resolve_stats = resolve_project(index)
     con.execute("SAVEPOINT django_enrichment")
     try:

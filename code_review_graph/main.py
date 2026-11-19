@@ -63,6 +63,7 @@ if TYPE_CHECKING:
         query_graph,
         refactor_func,
         run_postprocess,
+        search_text,
         semantic_search_nodes,
         traverse_graph_func,
     )
@@ -96,6 +97,7 @@ _LAZY_TOOL_NAMES = frozenset({
     "query_graph",
     "refactor_func",
     "run_postprocess",
+    "search_text",
     "semantic_search_nodes",
     "traverse_graph_func",
     "with_provenance",
@@ -364,7 +366,8 @@ SERVER_INSTRUCTIONS = (
     "Graph answers include dependents reached through re-exports and barrel files that "
     "never spell the name, which text search silently misses.\n"
     "For plain text - string literals, log messages, env var names, comments, config "
-    "keys - use Grep; the graph does not index text."
+    "keys - use search_text_tool; the graph does not index text, so it reads the files "
+    "and names the function or class around each match."
 )
 
 # Added to the instructions under ``serve --http --multi-repo``, so a client
@@ -729,6 +732,8 @@ async def semantic_search_nodes_tool(
         include_source: Return the source of each hit alongside its location,
                         so you can answer without opening the files. Costs
                         tokens; leave off when you only need locations.
+                        A hit with source also lists the constants it
+                        references, with their values.
                         Ignored when detail_level is "minimal". Default: False.
         expand_neighbors: With include_source, also return each top hit's direct
                           callers and callees with their source, so one call
@@ -746,6 +751,47 @@ async def semantic_search_nodes_tool(
             model=model, provider=provider, detail_level=detail_level,
             include_source=include_source, expand_neighbors=expand_neighbors,
             max_source_lines=max_source_lines,
+        ),
+        root,
+    )
+    return format_compact(result, root) if output_format == "compact" else result
+
+
+@mcp.tool(annotations={"readOnlyHint": True}, output_schema=None)
+async def search_text_tool(
+    query: str,
+    regex: bool = False,
+    case_sensitive: bool = False,
+    path: str = "",
+    limit: int = 50,
+    repo_root: Optional[str] = None,
+    output_format: Literal["compact", "json"] = "compact",
+) -> str | dict:
+    """Find text in tracked files: string literals, log messages, comments, config keys.
+
+    The graph indexes symbols, not the text inside them. This reads every file
+    Git tracks, including YAML, templates and other files the graph does not
+    parse, and reports each matching line with the narrowest function, test,
+    class or constant around it. Follow up with semantic_search_nodes_tool
+    (include_source=True) on that node to read it.
+
+    Args:
+        query: Text to find, literally unless regex is True. At most 200 characters.
+        regex: Treat query as a Python regular expression. Default: False.
+        case_sensitive: Match case. Default: False.
+        path: Optional glob on the repository-relative path, e.g. "apps/*.py".
+              "*" also matches "/".
+        limit: Maximum lines. Default: 50, at most 200. ``total`` counts all matches.
+        repo_root: Repository root path. Auto-detected if omitted.
+        output_format: "compact" (default) for readable text, "json" for the
+            original structured response.
+    """
+    root = _resolve_repo_root(repo_root)
+    result = await _offload(
+        "search_text_tool",
+        lambda: search_text(
+            query=query, regex=regex, case_sensitive=case_sensitive,
+            path=path, limit=limit, repo_root=root,
         ),
         root,
     )

@@ -597,10 +597,10 @@ See [docs/COMMANDS.md](docs/COMMANDS.md#standalone-daemon-cli-crg-daemon) for th
 </details>
 
 <details>
-<summary><strong>30 MCP tools</strong></summary>
+<summary><strong>31 MCP tools</strong></summary>
 <br>
 
-The assistant uses these once the graph is built. The 25 tools that only read carry `readOnlyHint: true`, so a client can run them without asking; the five that write (`build_or_update_graph_tool`, `run_postprocess_tool`, `embed_graph_tool`, `apply_refactor_tool`, `generate_wiki_tool`) do not.
+The assistant uses these once the graph is built. The 26 tools that only read carry `readOnlyHint: true`, so a client can run them without asking; the five that write (`build_or_update_graph_tool`, `run_postprocess_tool`, `embed_graph_tool`, `apply_refactor_tool`, `generate_wiki_tool`) do not.
 
 | Tool | Description |
 |------|-------------|
@@ -612,6 +612,7 @@ The assistant uses these once the graph is built. The 25 tools that only read ca
 | `query_graph_tool` | Callers, callees, tests, imports, inheritance, and `path_to` between two symbols |
 | `traverse_graph_tool` | BFS/DFS traversal from any node with a token budget |
 | `semantic_search_nodes_tool` | Search code entities by name or meaning |
+| `search_text_tool` | Find text in tracked files, with the function or class around each match |
 | `embed_graph_tool` | Compute vector embeddings for semantic search |
 | `list_graph_stats_tool` | Graph size and health |
 | `get_docs_section_tool` | Retrieve documentation sections |
@@ -745,7 +746,7 @@ code-review-graph embed --provider voyage --model voyage-code-3
 
 #### Tool Filtering
 
-CRG exposes 30 MCP tools by default. To limit the server to a subset, use `--tools` or the `CRG_TOOLS` environment variable:
+CRG exposes 31 MCP tools by default. To limit the server to a subset, use `--tools` or the `CRG_TOOLS` environment variable:
 
 ```bash
 # CLI flag

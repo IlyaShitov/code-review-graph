@@ -588,10 +588,10 @@ alias = "project-b"
 </details>
 
 <details>
-<summary><strong>30 個の MCP ツール</strong></summary>
+<summary><strong>31 個の MCP ツール</strong></summary>
 <br>
 
-グラフを構築すると、アシスタントはこれらを使います。読むだけの 25 個のツールには `readOnlyHint: true` が付いているので、クライアントは確認なしで実行できます。書き込みを行う 5 個（`build_or_update_graph_tool`、`run_postprocess_tool`、`embed_graph_tool`、`apply_refactor_tool`、`generate_wiki_tool`）には付いていません。
+グラフを構築すると、アシスタントはこれらを使います。読むだけの 26 個のツールには `readOnlyHint: true` が付いているので、クライアントは確認なしで実行できます。書き込みを行う 5 個（`build_or_update_graph_tool`、`run_postprocess_tool`、`embed_graph_tool`、`apply_refactor_tool`、`generate_wiki_tool`）には付いていません。
 
 | ツール | 内容 |
 |------|-------------|
@@ -603,6 +603,7 @@ alias = "project-b"
 | `query_graph_tool` | 呼び出し元、呼び出し先、テスト、インポート、継承、そして 2 つのシンボル間の `path_to` の照会 |
 | `traverse_graph_tool` | 任意のノードからの BFS/DFS 探索。トークン予算つき |
 | `semantic_search_nodes_tool` | 名前や意味でコードの実体を検索 |
+| `search_text_tool` | 追跡ファイル内のテキストを検索し、一致ごとに囲む関数やクラスを示す |
 | `embed_graph_tool` | セマンティック検索用のベクトル埋め込みを計算 |
 | `list_graph_stats_tool` | グラフの規模と健全性 |
 | `get_docs_section_tool` | ドキュメントの節を取得 |
@@ -736,7 +737,7 @@ code-review-graph embed --provider voyage --model voyage-code-3
 
 #### ツールの絞り込み
 
-CRG は既定で 30 個の MCP ツールを公開します。サーバーを一部に限定するには、`--tools` か `CRG_TOOLS` 環境変数を使います。
+CRG は既定で 31 個の MCP ツールを公開します。サーバーを一部に限定するには、`--tools` か `CRG_TOOLS` 環境変数を使います。
 
 ```bash
 # CLI flag

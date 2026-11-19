@@ -19,6 +19,12 @@ filter calls, module constants and class labels. It reads Python files already
 indexed by the graph, excluding migrations. Referenced library source is read
 from `.venv` or `venv` when available.
 
+`settings.X` read through `django.conf.settings` references the constant `X` of
+the module named by `os.environ.setdefault("DJANGO_SETTINGS_MODULE", ...)` in
+`manage.py`, followed through its `import *` lines. When several of them define
+the same name, the last one wins, as in Python. Settings that only an untracked
+file (such as `local_settings.py`) defines stay unresolved.
+
 Enrichment uses the build's SQLite connection and write lock, including custom
 database locations. Its changes are atomic; a write failure aborts the build
 instead of silently reporting an enriched graph. The result contains

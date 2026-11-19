@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from code_review_graph.django_enricher.enrich import find_settings_module
 from code_review_graph.django_enricher.index import Index
 from code_review_graph.django_enricher.resolve import (
     RULE_BEAT,
@@ -11,6 +12,7 @@ from code_review_graph.django_enricher.resolve import (
     Resolved,
     class_docstrings,
     constant_nodes,
+    resolve_project,
 )
 
 
@@ -160,3 +162,43 @@ def test_celery_refs(resolved: list[Resolved]) -> None:
         ("schedule.py", 2, "", "sync_items", "sync_items", RULE_BEAT),
         ("schedule.py", 3, "", "renamed_task", "renamed_task", RULE_BEAT),
     }
+
+
+def test_settings_refs(settings_project: Path) -> None:
+    """
+    `settings.X` ведёт на константу модуля `DJANGO_SETTINGS_MODULE`; из двух `import *` с одним
+    именем побеждает последний, как в Python; неизвестная настройка ребра не даёт.
+    """
+    settings_module = find_settings_module(settings_project)
+    index = Index(
+        settings_project,
+        sorted(settings_project.rglob("*.py")),
+        settings_module=settings_module,
+    )
+    results, _ = resolve_project(index)
+    got = {
+        (Path(r.file).name, r.scope, r.target.split("conf/settings/")[1])
+        for r in results
+        if r.rule == RULE_CONSTANT
+    }
+
+    assert settings_module == "conf.settings"
+    assert got == {
+        ("report.py", "page", "overrides.py::PAGE_SIZE"),
+        ("report.py", "page", "base.py::TIME_ZONE"),
+    }
+
+
+def test_settings_refs_without_settings_module(settings_project: Path) -> None:
+    """Без `DJANGO_SETTINGS_MODULE` в `manage.py` `settings.X` остаётся внешним именем."""
+    (settings_project / "manage.py").write_text("", encoding="utf-8")
+    settings_module = find_settings_module(settings_project)
+    index = Index(
+        settings_project,
+        sorted(settings_project.rglob("*.py")),
+        settings_module=settings_module,
+    )
+    results, _ = resolve_project(index)
+
+    assert settings_module == ""
+    assert not [r for r in results if Path(r.file).name == "report.py"]

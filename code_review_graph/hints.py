@@ -21,6 +21,7 @@ _INTENT_TOOLS: dict[str, set[str]] = {
     },
     "debugging": {
         "query_graph_tool", "get_flow_tool", "semantic_search_nodes_tool",
+        "search_text_tool",
     },
     "refactoring": {
         "refactor_tool", "apply_refactor_tool",
@@ -162,6 +163,16 @@ _WORKFLOW: dict[str, list[dict[str, str]]] = {
         {
             "tool": "get_impact_radius_tool",
             "suggestion": "Check the blast radius from matched nodes",
+        },
+    ],
+    "search_text_tool": [
+        {
+            "tool": "semantic_search_nodes_tool",
+            "suggestion": "Read the node around a match (include_source=True)",
+        },
+        {
+            "tool": "query_graph_tool",
+            "suggestion": "Inspect callers of the node around a match",
         },
     ],
 }

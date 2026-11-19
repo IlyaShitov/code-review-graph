@@ -68,11 +68,11 @@ def test_every_query_pattern_named_exists() -> None:
     )
 
 
-def test_plain_text_search_is_left_to_grep() -> None:
+def test_plain_text_search_goes_to_search_text() -> None:
     # The graph indexes structure, not text. Without this line the routing table
     # reads as "use the graph for everything", and an agent looking for a log
-    # message or an env var name gets an empty graph answer instead of a grep hit.
-    assert "Grep" in main.SERVER_INSTRUCTIONS
+    # message or an env var name gets an empty node search instead of a text hit.
+    assert "search_text_tool" in main.SERVER_INSTRUCTIONS
     assert "does not index text" in main.SERVER_INSTRUCTIONS
 
 

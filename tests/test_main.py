@@ -175,6 +175,7 @@ class TestLongRunningToolsAreAsync:
         "query_graph_tool",
         "get_review_context_tool",
         "semantic_search_nodes_tool",
+        "search_text_tool",
         "list_graph_stats_tool",
         "find_large_functions_tool",
         "list_flows_tool",

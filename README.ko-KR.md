@@ -594,10 +594,10 @@ alias = "project-b"
 </details>
 
 <details>
-<summary><strong>MCP 도구 30개</strong></summary>
+<summary><strong>MCP 도구 31개</strong></summary>
 <br>
 
-그래프를 만들고 나면 어시스턴트가 이 도구들을 씁니다. 읽기만 하는 도구 25개에는 `readOnlyHint: true`가 붙어 있어 클라이언트가 묻지 않고 실행할 수 있습니다. 쓰기를 하는 도구 5개(`build_or_update_graph_tool`, `run_postprocess_tool`, `embed_graph_tool`, `apply_refactor_tool`, `generate_wiki_tool`)에는 붙어 있지 않습니다.
+그래프를 만들고 나면 어시스턴트가 이 도구들을 씁니다. 읽기만 하는 도구 26개에는 `readOnlyHint: true`가 붙어 있어 클라이언트가 묻지 않고 실행할 수 있습니다. 쓰기를 하는 도구 5개(`build_or_update_graph_tool`, `run_postprocess_tool`, `embed_graph_tool`, `apply_refactor_tool`, `generate_wiki_tool`)에는 붙어 있지 않습니다.
 
 | 도구 | 내용 |
 |------|-------------|
@@ -609,6 +609,7 @@ alias = "project-b"
 | `query_graph_tool` | 호출자, 피호출자, 테스트, 임포트, 상속, 그리고 두 심벌 사이의 `path_to` 질의 |
 | `traverse_graph_tool` | 아무 노드에서 시작하는 BFS/DFS 순회. 토큰 예산 포함 |
 | `semantic_search_nodes_tool` | 이름이나 의미로 코드 개체 검색 |
+| `search_text_tool` | 추적 파일에서 텍스트를 찾고, 일치마다 감싸는 함수나 클래스를 표시 |
 | `embed_graph_tool` | 시맨틱 검색용 벡터 임베딩 계산 |
 | `list_graph_stats_tool` | 그래프 크기와 상태 |
 | `get_docs_section_tool` | 문서 절 가져오기 |
@@ -742,7 +743,7 @@ code-review-graph embed --provider voyage --model voyage-code-3
 
 #### 도구 필터링
 
-CRG는 기본으로 MCP 도구 30개를 노출합니다. 서버를 일부로 제한하려면 `--tools`나 `CRG_TOOLS` 환경 변수를 쓰세요.
+CRG는 기본으로 MCP 도구 31개를 노출합니다. 서버를 일부로 제한하려면 `--tools`나 `CRG_TOOLS` 환경 변수를 쓰세요.
 
 ```bash
 # CLI flag

@@ -2266,6 +2266,20 @@ class GraphStore:
             ).fetchall())
         return [self._row_to_edge(row) for row in rows]
 
+    def get_referenced_constants(self, qualified_name: str, limit: int) -> list[sqlite3.Row]:
+        """Constants a node references, in the order it first mentions them.
+
+        Each row carries the constant's ``name``, ``file_path``, ``line_start``
+        and ``signature``, which holds its value as ``NAME = value``.
+        """
+        return self._conn.execute(
+            "SELECT n.name, n.file_path, n.line_start, n.signature "
+            "FROM edges e JOIN nodes n ON n.qualified_name = e.target_qualified "
+            "WHERE e.source_qualified = ? AND e.kind = 'REFERENCES' AND n.kind = 'Constant' "
+            "GROUP BY n.qualified_name ORDER BY MIN(e.line), n.qualified_name LIMIT ?",
+            (qualified_name, limit),
+        ).fetchall()
+
     def get_edges_claiming(self, qualified_name: str) -> list[GraphEdge]:
         """Edges whose settled endpoint once named *qualified_name*.
 

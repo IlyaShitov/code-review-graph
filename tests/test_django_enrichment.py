@@ -4,10 +4,11 @@ from textwrap import dedent
 
 import pytest
 
+from code_review_graph.compact import format_compact
 from code_review_graph.graph import GraphStore
 from code_review_graph.incremental import full_build, incremental_update
 from code_review_graph.tools.build import _run_postprocess, build_or_update_graph
-from code_review_graph.tools.query import query_graph
+from code_review_graph.tools.query import query_graph, semantic_search_nodes
 
 
 @pytest.fixture
@@ -250,3 +251,25 @@ def test_celery_task_calls_and_beat_reach_the_task(django_repo, monkeypatch):
         ("CALLS", f"{django_repo}/usage.py::Sync.run", 6),
         ("REFERENCES", f"{django_repo}/settings.py::CELERY_BEAT_SCHEDULE", 2),
     ]
+
+
+def test_search_source_lists_referenced_constants(django_repo):
+    """A hit with source shows the constants it reads with their values; without source, not."""
+    (django_repo / ".git").mkdir()
+    build_or_update_graph(repo_root=str(django_repo), full_rebuild=True, postprocess="minimal")
+
+    with_source = semantic_search_nodes(
+        "report", kind="Function", repo_root=str(django_repo), include_source=True
+    )
+    without_source = semantic_search_nodes("report", kind="Function", repo_root=str(django_repo))
+
+    assert with_source["results"][0]["constants"] == [
+        {
+            "name": "MAX_ITEMS",
+            "value": "MAX_ITEMS = 5",
+            "file_path": str(django_repo / "models.py"),
+            "line": 3,
+        }
+    ]
+    assert "models.py:3  MAX_ITEMS = 5" in format_compact(with_source, str(django_repo))
+    assert "constants" not in without_source["results"][0]

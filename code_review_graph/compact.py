@@ -9,7 +9,7 @@ _NODE_FIELDS = {
     "id", "name", "parent_name", "qualified_name", "kind", "file_path",
     "line_start", "line_end", "language", "params", "return_type", "score",
     "is_test", "signature", "docstring", "call_site", "source", "callers", "callees",
-    "import_target", "importer", "file",
+    "constants", "import_target", "importer", "file",
 }
 _EDGE_FIELDS = {
     "id", "source", "target", "kind", "file_path", "line", "confidence_tier", "confidence",
@@ -84,6 +84,13 @@ def _node_lines(
     lines = [label]
     if node.get("source") is not None:
         lines.append(node["source"])
+    if node.get("constants"):
+        lines.append("constants:")
+        lines.extend(
+            f"{constant['file_path'].removeprefix(prefix)}:{constant['line']}  "
+            f"{_value(constant['value'])}"
+            for constant in node["constants"]
+        )
     for relation in ("callers", "callees"):
         if node.get(relation):
             lines.append(f"{relation}:")

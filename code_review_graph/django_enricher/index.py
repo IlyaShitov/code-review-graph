@@ -35,6 +35,7 @@ SELF_ANNOTATIONS: Final[frozenset[str]] = frozenset(
 # Django остаётся внешним именем: распознавание кверисетов держится на его базовом `QuerySet`
 OPAQUE_PACKAGES: Final[frozenset[str]] = frozenset({"django"})
 BAKER_RECIPE: Final[str] = "model_bakery.recipe.Recipe"
+SETTINGS_PREFIX: Final[str] = "django.conf.settings."
 
 
 def walk_local(node: ast.AST) -> Iterator[ast.AST]:
@@ -204,9 +205,15 @@ class ModuleInfo:
 
 class Index:
     def __init__(
-        self, source_root: Path, project_files: list[Path], site_packages: Path | None = None
+        self,
+        source_root: Path,
+        project_files: list[Path],
+        site_packages: Path | None = None,
+        settings_module: str = "",
     ):
         self.modules: dict[str, ModuleInfo] = {}
+        # модуль `DJANGO_SETTINGS_MODULE`: в него разрешается `django.conf.settings.X`
+        self._settings_module = settings_module
         self.by_dotted: dict[str, ClassInfo] = {}
         # таски по имени, под которым их регистрирует Celery: так на них ссылается расписание beat
         self.tasks_by_name: dict[str, TaskInfo] = {}
@@ -469,6 +476,9 @@ class Index:
             return self.by_dotted[dotted]
         if depth > 8:
             return None
+        if self._settings_module and dotted.startswith(SETTINGS_PREFIX):
+            setting = dotted.removeprefix(SETTINGS_PREFIX)
+            return self.resolve_dotted(f"{self._settings_module}.{setting}", depth + 1)
         module_name, _, name = dotted.rpartition(".")
         module = self.modules.get(module_name) or self._lib_module(module_name)
         if module is None:
@@ -482,7 +492,8 @@ class Index:
             return module.tasks[name]
         if name in module.imports:
             return self.resolve_dotted(module.imports[name], depth + 1)
-        for star in module.stars:
+        # при нескольких `import *` с одним именем Python оставляет последнее определение
+        for star in reversed(module.stars):
             found = self.resolve_dotted(f"{star}.{name}", depth + 1)
             if isinstance(found, (ClassInfo, ConstantInfo, TaskInfo)):
                 return found

@@ -363,6 +363,45 @@ def resolved(index: Index) -> list[Resolved]:
 
 
 @pytest.fixture
+def settings_project(tmp_path: Path) -> Path:
+    """
+    Проект с пакетом настроек `conf.settings` из двух star-модулей: `PAGE_SIZE` задан в обоих,
+    `TIME_ZONE` — только в базовом. `report.py` читает их через `django.conf.settings`.
+    """
+    files = {
+        "manage.py": """
+            import os
+
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conf.settings')
+        """,
+        "conf/__init__.py": "",
+        "conf/settings/__init__.py": """
+            from .base import *
+            from .overrides import *
+        """,
+        "conf/settings/base.py": """
+            PAGE_SIZE = 10
+            TIME_ZONE = 'UTC'
+        """,
+        "conf/settings/overrides.py": """
+            PAGE_SIZE = 50
+        """,
+        "report.py": """
+            from django.conf import settings
+
+
+            def page():
+                return settings.PAGE_SIZE, settings.TIME_ZONE, settings.MISSING
+        """,
+    }
+    for rel, source in files.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(textwrap.dedent(source).lstrip("\n"), encoding="utf-8")
+    return tmp_path
+
+
+@pytest.fixture
 def graph_db(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     """Класс `Q` с методами `m`/`n`, функция-источник `f`, файл `/p/c.py` под константу;
     голое ребро `m` (стр. 3) и `self.n()`, привязанный графом к `Sub` (стр. 9). Схема `nodes` — как у графа."""

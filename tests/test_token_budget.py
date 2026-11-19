@@ -361,6 +361,14 @@ BUDGETS: dict[str, dict[str, Any]] = {
         # 100 rows, the ceiling in query.py.
         "worst_max": 30_000,
     },
+    "search_text_tool": {
+        "default": {"query": "helper"},
+        # One letter matches nearly every line of the fixture repository.
+        "worst": {"query": "e", "limit": HUGE},
+        "default_max": 8_000,
+        # 200 rows of at most 200 characters each, the ceiling in query.py.
+        "worst_max": 30_000,
+    },
     "embed_graph_tool": {
         # sentence-transformers is not a test dependency, so this exercises
         # the structured "provider unavailable" error response.

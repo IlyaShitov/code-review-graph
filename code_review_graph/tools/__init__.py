@@ -1,6 +1,6 @@
 """MCP tool definitions for the Code Review Graph server.
 
-Exposes 30 tools (each registered in main.py with a ``_tool`` suffix):
+Exposes 31 tools (each registered in main.py with a ``_tool`` suffix):
 1. build_or_update_graph  - full or incremental build
 2. get_impact_radius      - blast radius from changed files
 3. query_graph            - predefined graph queries
@@ -31,6 +31,7 @@ Exposes 30 tools (each registered in main.py with a ``_tool`` suffix):
 28. traverse_graph        - BFS/DFS traversal from best-matching node
 29. run_postprocess       - flows, communities and FTS for an existing graph
 30. get_minimal_context   - compact task-scoped entry point (call this first)
+31. search_text           - text search in tracked files, mapped to graph nodes
 """
 
 from __future__ import annotations
@@ -78,6 +79,7 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "get_impact_radius": (".query", "get_impact_radius"),
     "list_graph_stats": (".query", "list_graph_stats"),
     "query_graph": (".query", "query_graph"),
+    "search_text": (".query", "search_text"),
     "semantic_search_nodes": (".query", "semantic_search_nodes"),
     "traverse_graph_func": (".query", "traverse_graph_func"),
     # refactor_tools
@@ -120,6 +122,7 @@ __all__ = [
     "get_impact_radius",
     "list_graph_stats",
     "query_graph",
+    "search_text",
     "semantic_search_nodes",
     "traverse_graph_func",
     # refactor_tools

@@ -4,7 +4,7 @@
 review journey across about seven tools. This module extends that idea to
 everything the server publishes:
 
-* every registered ``@mcp.tool()`` (the server advertises 30; the count is
+* every registered ``@mcp.tool()`` (the server advertises 31; the count is
   read from ``tools/list`` at run time, never hard-coded), called with
   realistic arguments against a real built graph, asserting on the CONTENT
   that comes back rather than on the absence of an exception;
@@ -468,7 +468,7 @@ class Walk:
 
 
 async def test_every_registered_tool_returns_real_content(unbuilt: Fixture) -> None:
-    """Drive all 30 tools through one client session and assert on payloads.
+    """Drive all 31 tools through one client session and assert on payloads.
 
     The canary is at the bottom: the set of tools exercised here has to equal
     the set the server advertises over ``tools/list``. A tool added to
@@ -487,8 +487,8 @@ async def test_every_registered_tool_returns_real_content(unbuilt: Fixture) -> N
         async with _client(fixture, embed_env) as session:
             listed = await asyncio.wait_for(session.list_tools(), timeout=CALL_TIMEOUT)
             registered = {tool.name for tool in listed.tools}
-            assert len(registered) == 30, (
-                f"expected the documented 30 tools, tools/list advertised {len(registered)}"
+            assert len(registered) == 31, (
+                f"expected the documented 31 tools, tools/list advertised {len(registered)}"
             )
 
             # --- 1. build -------------------------------------------------
@@ -1620,7 +1620,7 @@ def test_spec_conformance_requirements_from_issue_919(built: Fixture) -> None:
         # The modern path serves the real tool list with no handshake at all.
         tools = server.request("tools/list", _envelope(), req_id=3)
         assert tools is not None and "result" in tools, tools
-        assert len(tools["result"]["tools"]) == 30, len(tools["result"]["tools"])
+        assert len(tools["result"]["tools"]) == 31, len(tools["result"]["tools"])
 
         # An unknown method gets the JSON-RPC 2.0 code for one (section 5.1).
         unknown = server.request("surface/no-such-method", _envelope(), req_id=4)
@@ -1652,7 +1652,7 @@ def test_spec_conformance_requirements_from_issue_919(built: Fixture) -> None:
 
         tools = server.request("tools/list", {}, req_id=2)
         assert tools is not None and "result" in tools, tools
-        assert len(tools["result"]["tools"]) == 30, len(tools["result"]["tools"])
+        assert len(tools["result"]["tools"]) == 31, len(tools["result"]["tools"])
 
         # The checker's SHOULD-level finding on the older revision: an
         # unrecognised pagination cursor is answered with a first page rather
